@@ -1,0 +1,144 @@
+Post-training with LoRA
+
+Can a small update change
+a model’s task behavior?
+
+Qwen2.5-0.5B + SST-2
+
+DSAI4207 / POST-TRAINING TUTORIAL 01
+
+Our task
+
+Review
+
+“The acting is excellent, but the story is painfully
+dull.”
+
+Expected output
+
+negative or positive
+The output must exactly match the correct sentiment label.
+
+DSAI4207 / POST-TRAINING TUTORIAL 02
+
+SFT and LoRA
+
+Question Our choice
+
+What should the model learn? SFT: predict the demonstrated answer
+
+Which parameters may change? LoRA: train small added matrices
+
+What stays frozen? The original base-model weights
+
+Our experiment combines LoRA with the SFT objective.
+
+DSAI4207 / POST-TRAINING TUTORIAL 03
+
+The trainable LoRA update
+
+W′ = W + (α / r) BA
+
+Frozen: W Trainable: A and B
+
+r: update rank α: scaling parameter
+
+DSAI4207 / POST-TRAINING TUTORIAL 04
+
+How many parameters change?
+
+Example: one 2048 × 2048 matrix Parameter count
+
+Full matrix 4,194,304
+
+LoRA with rank 8 8 × (2048 + 2048) = 32,768
+
+Ratio for this example 0.78%
+
+The notebook prints the actual trainable count for Qwen.
+
+DSAI4207 / POST-TRAINING TUTORIAL 05
+
+Only answer tokens receive loss
+
+Region Example Loss labels
+
+Prompt Review: ... Sentiment: −100
+
+Answer positive + EOS Target token IDs
+
+Padding Padding positions −100
+
+The model reads the prompt as context for predicting the answer.
+
+DSAI4207 / POST-TRAINING TUTORIAL 06
+
+Accuracy
+
+Accuracy = correct labels / N × 100%
+
+N = number of evaluation examples.
+The answer must exactly match the correct label.
+
+Extra text or a wrong label counts as incorrect.
+
+Use the same examples and decoding settings before and after training.
+
+DSAI4207 / POST-TRAINING TUTORIAL 07
+
+The experiment
+
+1. Inspect an example and its target label.
+
+2. Set up LoRA and run the provided training code.
+
+3. Run evaluation and check the accuracy.
+
+4. Try a different rank, alpha or learning rate.
+
+DSAI4207 / POST-TRAINING TUTORIAL 08
+
+Example LoRA configuration
+
+LORA_R = 8
+LORA_ALPHA = 16
+TARGET_MODULES = ["q_proj", "v_proj"]
+
+Change r or alpha, then train a new adapter.
+
+Keep TARGET_MODULES fixed when comparing rank or alpha.
+
+DSAI4207 / POST-TRAINING TUTORIAL 09
+
+Before and after fine-tuning
+
+Model Accuracy
+
+Base Printed by the notebook
+
+Base + LoRA Printed by the notebook
+
+Did accuracy improve, stay the same, or decrease?
+
+A short training run may not improve accuracy.
+
+DSAI4207 / POST-TRAINING TUTORIAL 10
+
+Optional configuration experiment
+
+Rank comparison with α/r = 2
+
+Configuration r alpha alpha / r
+
+A 4 8 2
+
+B 8 16 2
+
+C 16 32 2
+
+Or keep r = 8 and compare alpha = 8, 16, 32.
+For a learning-rate trial, keep r and alpha fixed.
+
+Keep other settings fixed. Start each run from the original base model.
+
+DSAI4207 / POST-TRAINING TUTORIAL 11

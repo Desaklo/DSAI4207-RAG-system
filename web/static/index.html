@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DSAI 4207 — RAG Demo</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --panel: #1a2332;
+      --border: #2d3a4f;
+      --text: #e7ecf3;
+      --muted: #9aa8bc;
+      --accent: #5b9fd4;
+      --accent2: #6bcf8e;
+      --warn: #e6b35a;
+      --danger: #e07a7a;
+      --chip: #243044;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.45;
+    }
+    header {
+      padding: 1.25rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg, #152033, var(--bg));
+    }
+    header h1 { margin: 0 0 0.35rem; font-size: 1.35rem; font-weight: 650; }
+    header p { margin: 0; color: var(--muted); font-size: 0.92rem; max-width: 70ch; }
+    main {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.25rem;
+      padding: 1.25rem 1.5rem 2.5rem;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    @media (max-width: 900px) {
+      main { grid-template-columns: 1fr; }
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem 1.1rem;
+    }
+    .panel h2 {
+      margin: 0 0 0.75rem;
+      font-size: 1.05rem;
+      font-weight: 600;
+    }
+    label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 0.35rem; }
+    textarea {
+      width: 100%;
+      min-height: 96px;
+      resize: vertical;
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.65rem 0.75rem;
+      font: inherit;
+    }
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.6rem;
+      align-items: center;
+      margin: 0.85rem 0;
+    }
+    .k-group { gap: 0.4rem; }
+    .k-group input { display: none; }
+    .k-group label.k-chip {
+      margin: 0;
+      padding: 0.35rem 0.75rem;
+      background: var(--chip);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      cursor: pointer;
+      color: var(--text);
+      font-size: 0.9rem;
+      user-select: none;
+    }
+    .k-group input:checked + label.k-chip {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #0b1220;
+      font-weight: 600;
+    }
+    button {
+      background: var(--accent);
+      color: #0b1220;
+      border: none;
+      border-radius: 8px;
+      padding: 0.55rem 1rem;
+      font-weight: 650;
+      cursor: pointer;
+      font: inherit;
+    }
+    button:hover { filter: brightness(1.08); }
+    button:disabled { opacity: 0.55; cursor: wait; }
+    button.secondary {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--border);
+      font-weight: 500;
+    }
+    .status {
+      font-size: 0.88rem;
+      color: var(--muted);
+      margin: 0.5rem 0 0;
+    }
+    .status.warn { color: var(--warn); }
+    .status.ok { color: var(--accent2); }
+    .answer-box {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.85rem;
+      white-space: pre-wrap;
+      min-height: 3rem;
+    }
+    .chunks details {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-top: 0.5rem;
+      background: var(--bg);
+    }
+    .chunks summary {
+      cursor: pointer;
+      padding: 0.55rem 0.75rem;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    .chunks .body {
+      padding: 0 0.75rem 0.75rem;
+      font-size: 0.88rem;
+      white-space: pre-wrap;
+      color: var(--text);
+      border-top: 1px solid var(--border);
+      padding-top: 0.65rem;
+    }
+    .score { color: var(--accent2); font-variant-numeric: tabular-nums; }
+    .preset-list {
+      max-height: 420px;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+    .preset {
+      text-align: left;
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.5rem 0.65rem;
+      font-weight: 500;
+      font-size: 0.85rem;
+    }
+    .preset:hover { border-color: var(--accent); }
+    .preset .id { color: var(--accent); font-weight: 650; margin-right: 0.4rem; }
+    .chart-note {
+      font-size: 0.85rem;
+      color: var(--warn);
+      margin: 0.35rem 0 0.75rem;
+    }
+    .chart-wrap { position: relative; height: 280px; }
+    .span-2 { grid-column: 1 / -1; }
+    .badge {
+      display: inline-block;
+      font-size: 0.75rem;
+      padding: 0.15rem 0.45rem;
+      border-radius: 999px;
+      background: #3a2e14;
+      color: var(--warn);
+      border: 1px solid #5a4820;
+      margin-left: 0.35rem;
+      vertical-align: middle;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>DSAI 4207 — RAG demo <span id="modeBadge" class="badge" hidden></span></h1>
+    <p>
+      Ask a course question, choose retrieval depth <strong>k ∈ {0,1,2,4,8}</strong>,
+      inspect retrieved chunks, and view the unsupported-claim curve
+      (demo placeholder until experiment + marking are done).
+    </p>
+  </header>
+
+  <main>
+    <section class="panel">
+      <h2>Ask</h2>
+      <label for="question">Question</label>
+      <textarea id="question" placeholder="Type a question about the lecture notes…"></textarea>
+
+      <div class="row k-group" id="kGroup" role="radiogroup" aria-label="k">
+        <span style="color:var(--muted);font-size:0.85rem;margin-right:0.25rem;">k =</span>
+        <template id="kTpl"></template>
+      </div>
+
+      <div class="row">
+        <button id="askBtn" type="button">Ask</button>
+        <span class="status" id="askStatus"></span>
+      </div>
+
+      <h2 style="margin-top:1.1rem;">Answer</h2>
+      <div class="answer-box" id="answerBox"><span style="color:var(--muted)">No answer yet.</span></div>
+      <p class="status" id="genMsg"></p>
+
+      <h2 style="margin-top:1.1rem;">Retrieved chunks</h2>
+      <div class="chunks" id="chunks"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Preset questions <span style="color:var(--muted);font-weight:500;font-size:0.85rem;" id="qCount"></span></h2>
+      <p class="status" style="margin-top:-0.35rem;margin-bottom:0.65rem;">Click to fill the question box.</p>
+      <div class="preset-list" id="presets"></div>
+    </section>
+
+    <section class="panel span-2">
+      <h2>Unsupported-claim rate vs k</h2>
+      <p class="chart-note" id="chartNote">Loading curve…</p>
+      <div class="row">
+        <button type="button" class="secondary" id="loadDemoBtn">Load sample curve (demo_curve.json)</button>
+        <button type="button" class="secondary" id="refreshCurveBtn">Refresh /api/curve</button>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="curveChart"></canvas>
+      </div>
+      <h2 style="margin-top:1.25rem;">Live retrieval scores (current query)</h2>
+      <p class="status" style="margin-top:-0.25rem;margin-bottom:0.65rem;">
+        After you Ask with k &gt; 0, bars show cosine similarity of each retrieved chunk.
+      </p>
+      <div class="chart-wrap" style="height:220px;">
+        <canvas id="scoreChart"></canvas>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const K_VALUES = [0, 1, 2, 4, 8];
+    let curveChart = null;
+    let scoreChart = null;
+
+    function el(id) { return document.getElementById(id); }
+
+    function buildKControls() {
+      const group = el("kGroup");
+      K_VALUES.forEach((k, i) => {
+        const id = `k_${k}`;
+        const input = document.createElement("input");
+        input.type = "radio";
+        input.name = "k";
+        input.id = id;
+        input.value = String(k);
+        if (k === 4) input.checked = true;
+        const lab = document.createElement("label");
+        lab.htmlFor = id;
+        lab.className = "k-chip";
+        lab.textContent = String(k);
+        group.appendChild(input);
+        group.appendChild(lab);
+      });
+    }
+
+    function selectedK() {
+      const r = document.querySelector('input[name="k"]:checked');
+      return r ? parseInt(r.value, 10) : 4;
+    }
+
+    async function loadHealth() {
+      try {
+        const res = await fetch("/api/health");
+        const data = await res.json();
+        const badge = el("modeBadge");
+        badge.hidden = false;
+        if (data.has_api_key) {
+          badge.textContent = "generation ON";
+          badge.style.background = "#143322";
+          badge.style.color = "var(--accent2)";
+          badge.style.borderColor = "#1f5a3a";
+        } else {
+          badge.textContent = "retrieval-only (no API key)";
+        }
+      } catch (_) { /* ignore */ }
+    }
+
+    async function loadQuestions() {
+      const res = await fetch("/api/questions");
+      const data = await res.json();
+      el("qCount").textContent = `(${data.count})`;
+      const box = el("presets");
+      box.innerHTML = "";
+      (data.questions || []).forEach((q) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "preset";
+        b.innerHTML = `<span class="id">${q.id}</span>${escapeHtml(q.question)}`;
+        b.addEventListener("click", () => {
+          el("question").value = q.question;
+          el("question").focus();
+        });
+        box.appendChild(b);
+      });
+    }
+
+    function escapeHtml(s) {
+      return String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function renderChunks(chunks) {
+      const root = el("chunks");
+      root.innerHTML = "";
+      if (!chunks || !chunks.length) {
+        root.innerHTML = `<p class="status">No chunks (k=0 or empty retrieval).</p>`;
+        updateScoreChart([]);
+        return;
+      }
+      chunks.forEach((c, i) => {
+        const d = document.createElement("details");
+        if (i === 0) d.open = false;
+        const sum = document.createElement("summary");
+        sum.innerHTML = `#${i + 1} <code>${escapeHtml(c.chunk_id)}</code> · `
+          + `<span class="score">score ${Number(c.score).toFixed(4)}</span> · `
+          + `${escapeHtml(c.source_file)}`;
+        const body = document.createElement("div");
+        body.className = "body";
+        body.textContent = c.text;
+        d.appendChild(sum);
+        d.appendChild(body);
+        root.appendChild(d);
+      });
+      updateScoreChart(chunks);
+    }
+
+    function updateScoreChart(chunks) {
+      const labels = chunks.map((c, i) => `#${i + 1}`);
+      const scores = chunks.map((c) => c.score);
+      const ctx = el("scoreChart").getContext("2d");
+      if (scoreChart) scoreChart.destroy();
+      scoreChart = new Chart(ctx, {
+        type: "bar",
+        data: {
+          labels,
+          datasets: [{
+            label: "Retrieval score (cosine)",
+            data: scores,
+            backgroundColor: "rgba(91, 159, 212, 0.65)",
+            borderColor: "rgba(91, 159, 212, 1)",
+            borderWidth: 1,
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: { beginAtZero: true, max: 1, ticks: { color: "#9aa8bc" }, grid: { color: "#2d3a4f" } },
+            x: { ticks: { color: "#9aa8bc" }, grid: { display: false } },
+          },
+          plugins: { legend: { labels: { color: "#e7ecf3" } } },
+        },
+      });
+    }
+
+    function renderCurve(data) {
+      const note = el("chartNote");
+      const isDemo = data.source === "demo" || (data.label || "").toUpperCase().includes("DEMO");
+      note.textContent = (data.label || "") + (data.note ? " — " + data.note : "");
+      note.style.color = isDemo ? "var(--warn)" : "var(--accent2)";
+
+      let metricKey = "unsupported_claim_rate";
+      let yLabel = "Unsupported-claim rate";
+      let series = data.unsupported_claim_rate;
+      if (!series && data.n_answers) {
+        metricKey = "n_answers";
+        yLabel = "Answers logged";
+        series = data.n_answers;
+      }
+      const labels = (data.k_values || []).map(String);
+      const ctx = el("curveChart").getContext("2d");
+      if (curveChart) curveChart.destroy();
+      curveChart = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels,
+          datasets: [{
+            label: isDemo ? `${yLabel} (DEMO)` : yLabel,
+            data: series || [],
+            borderColor: isDemo ? "#e6b35a" : "#6bcf8e",
+            backgroundColor: isDemo ? "rgba(230,179,90,0.2)" : "rgba(107,207,142,0.2)",
+            tension: 0.25,
+            fill: true,
+            pointRadius: 5,
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: {
+              beginAtZero: true,
+              max: metricKey === "unsupported_claim_rate" ? 1 : undefined,
+              ticks: { color: "#9aa8bc" },
+              grid: { color: "#2d3a4f" },
+              title: { display: true, text: yLabel, color: "#9aa8bc" },
+            },
+            x: {
+              ticks: { color: "#9aa8bc" },
+              grid: { color: "#2d3a4f" },
+              title: { display: true, text: "k (chunks)", color: "#9aa8bc" },
+            },
+          },
+          plugins: {
+            legend: { labels: { color: "#e7ecf3" } },
+            title: {
+              display: isDemo,
+              text: "Example data — real curve after experiment + marking",
+              color: "#e6b35a",
+            },
+          },
+        },
+      });
+    }
+
+    async function loadCurve(forceDemo = false) {
+      const url = forceDemo ? "/api/curve?force_demo=true" : "/api/curve";
+      const res = await fetch(url);
+      const data = await res.json();
+      renderCurve(data);
+    }
+
+    async function ask() {
+      const question = el("question").value.trim();
+      if (!question) {
+        el("askStatus").textContent = "Enter a question first.";
+        el("askStatus").className = "status warn";
+        return;
+      }
+      const k = selectedK();
+      el("askBtn").disabled = true;
+      el("askStatus").textContent = "Retrieving…";
+      el("askStatus").className = "status";
+      try {
+        const res = await fetch("/api/ask", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question, k }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || res.statusText);
+
+        if (data.answer) {
+          el("answerBox").textContent = data.answer;
+        } else {
+          el("answerBox").innerHTML =
+            `<span style="color:var(--muted)">(No generated answer)</span>`;
+        }
+        el("genMsg").textContent = data.message || "";
+        el("genMsg").className =
+          data.generation_mode === "openai" ? "status ok" : "status warn";
+        renderChunks(data.chunks || []);
+        el("askStatus").textContent =
+          data.generation_mode === "openai"
+            ? `Done (${data.model || "api"}).`
+            : "Done (retrieval only).";
+        el("askStatus").className =
+          data.generation_mode === "openai" ? "status ok" : "status warn";
+      } catch (e) {
+        el("askStatus").textContent = String(e.message || e);
+        el("askStatus").className = "status warn";
+      } finally {
+        el("askBtn").disabled = false;
+      }
+    }
+
+    buildKControls();
+    el("askBtn").addEventListener("click", ask);
+    el("loadDemoBtn").addEventListener("click", () => loadCurve(true));
+    el("refreshCurveBtn").addEventListener("click", () => loadCurve(false));
+    el("question").addEventListener("keydown", (ev) => {
+      if ((ev.metaKey || ev.ctrlKey) && ev.key === "Enter") ask();
+    });
+
+    loadHealth();
+    loadQuestions();
+    loadCurve(false);
+    updateScoreChart([]);
+  </script>
+</body>
+</html>

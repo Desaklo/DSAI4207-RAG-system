@@ -1,0 +1,1738 @@
+DSAI4207 Introduction to Large Language Models
+Lecture 10: Teaching LLMs to Look Things Up
+Semantic Embeddings, Topic Modeling & RAG
+
+Xingyi Yang
+Hong Kong Polytechnic University
+
+Our Challenge: The PolyU Film Club Assistant
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+STUDENT
+According to our LLM ASSISTANT
+film club's reading I can't see your
+pack, how scientifically reading pack.
+accurate is Interstellar?
+
+INTERSTELLAR
+
+READING PACK
+internal AI Assistant
+
+How can the assistant find the right evidence and answer reliably?
+Hypothetical teaching scenario with original illustration; not an actual PolyU activity.
+
+The Answer Is Somewhere in the Documents
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+Q: According to our reading pack, how scientifically accurate is Interstellar?
+
+CAST & CREW PLOT NOTES PHYSICS NOTES
+
+Ensemble cast and A crew travels through Gravitational lensing and
+crew credits. a wormhole to find a time dilation near a
+new home. black hole.
+may hold evidence
+
+PRODUCTION NOTES REVIEW PACK READING PACK
+
+How the visual effects Critics' reception and Club discussion notes,
+were created. audience reviews. §1–§5. Internal.
+
+may hold evidence
+
+One small corpus will follow us through the whole lecture.
+Illustrative documents. The Reading Pack is a hypothetical internal club document.
+
+Closed-Book: Knowledge Outside the Weights
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+no access
+LLM
+knowledge in the weights
+
+Reading Pack
+
+The model cannot reliably use what is absent from its weights and context.
+
+Prompting vs Evidence
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+LECTURE 9 · BETTER PROMPT LECTURE 10 · BETTER EVIDENCE
+
+You are a careful film-physics Answer using this passage:
+expert. Think step by step Reading Pack §3: …the black-hole
+and answer concisely.
+
+≠
+imagery drew on physicists' input…
+
+LLM LLM
+
+changes how the model answers changes what the model can know
+
+Prompting organizes what we provide; retrieval finds what we have not.
+
+Two Places Knowledge Can Live
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+RP
+
+weights +
+
+Inside the model Outside the model
+fast to use searchable · updatable
+slow to update · hard to cite traceable to a source
+
+RAG keeps the model and adds a searchable, updatable external memory.
+
+Closed-Book: The Assistant Cannot Look It Up
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+QUESTION
+How scientifically accurate is
+Interstellar, per our reading pack?
+
+RP
+no way in
+
+Assistant ASSISTANT
+I can't check the reading pack.
+
+Without access to the library, the assistant has nothing to check.
+
+Open-Book: Search, Read, Answer
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+QUESTION
+How scientifically accurate is
+Interstellar, per our reading pack?
+
+RP
+
+search
+
+Assistant
+
+How can a machine know which passage is relevant, even if the words differ?
+
+Open-Book: Search, Read, Answer
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+QUESTION
+How scientifically accurate is
+Interstellar, per our reading pack? RP
+
+RP
+
+search
+
+Assistant
+
+How can a machine know which passage is relevant, even if the words differ?
+
+Open-Book: Search, Read, Answer
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+[S1] Reading Pack §3
+QUESTION
+How scientifically accurate is …the black-hole imagery drew
+on physicists' input… RP
+Interstellar, per our reading pack?
+
+RP
+
+search
+
+Assistant
+
+How can a machine know which passage is relevant, even if the words differ?
+
+Open-Book: Search, Read, Answer
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+[S1] Reading Pack §3
+QUESTION
+How scientifically accurate is …the black-hole imagery drew
+on physicists' input… RP
+Interstellar, per our reading pack?
+
+RP
+
+search
+
+ASSISTANT
+Assistant
+The black-hole imagery drew
+on physicists' input [S1].
+
+How can a machine know which passage is relevant, even if the words differ?
+
+Giving Text a Position in Space
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+Topic Discovery
+side application
+
+Documents Embedding
+Embedding LLM Diagnose
+the corpus text → vector
+text vector answer (RAG) evaluate
+
+Retrieval
+find evidence
+
+How can text become comparable?
+
+System map for the lecture; Topic Discovery is a side application, Retrieval is the main path.
+
+Recall: What Does BERT Produce?
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+The movie was scientifically accurate
+
+BERT encoder
+
+one contextual hidden state per token
+
+Encoder-only Transformer, recalled from Lectures 4, 5 and 7.
+
+One Sentence, Many Contextual Vectors
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+The movie was scientifically accurate
+
+BERT encoder
+
+h₁ h₂
+Each vector depends on the whole sentence, not only on its own token.
+
+One Sentence, Many Contextual Vectors
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+The movie was scientifically accurate
+
+BERT encoder
+
+h₁ h₂ h₃ h₄ h₅
+Each vector depends on the whole sentence, not only on its own token.
+
+Search Needs One Comparable Vector
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+h₁ h₂ h₃ h₄ h₅
+
+one sentence vector e(x)
+One fixed-size vector per text: cheap to store and to compare.
+A design choice for single-vector retrieval; multi-vector methods also exist.
+
+Pooling: Many Vectors, One Average
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+tokens of one padded batch row
+
+h₁ h₂ h₃ h₄ h₅ [PAD] [PAD]
+0.2 0.6 0.2 0.9 0.1 0.0 0.0
+0.8 0.4 0.2 0.7 0.4 0.0 0.0
++ + + +
+0.1 0.3 0.5 0.1 0.0 0.0 0.0
+0.4 0.0 0.8 0.2 0.6 0.0 0.0
+
+m 1 1 1 1 1 0 0
+
+Add the real vectors, skip the padding, divide by the real token count.
+Toy 4-dimensional vectors. Rows of e(x): (2.0, 2.5, 1.0, 2.0) / 5 = (0.4, 0.5, 0.2, 0.4).
+
+Pooling: Many Vectors, One Average
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+tokens of one padded batch row ÷5
+
+h₁ h₂ h₃ h₄ h₅ [PAD] [PAD] e(x)
+0.2 0.6 0.2 0.9 0.1 0.0 0.0 0.4
+0.8 0.4 0.2 0.7 0.4 0.0 0.0 0.5
++ + + +
+0.1 0.3 0.5 0.1 0.0 0.0 0.0 0.2
+0.4 0.0 0.8 0.2 0.6 0.0 0.0 0.4
+
+m 1 1 1 1 1 0 0 mean
+
+Add the real vectors, skip the padding, divide by the real token count.
+Toy 4-dimensional vectors. Rows of e(x): (2.0, 2.5, 1.0, 2.0) / 5 = (0.4, 0.5, 0.2, 0.4).
+
+Mean Pooling: The Formula
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+h₁ h₂ h₃ h₄ h₅ PAD PAD ∑i mi h i
+e(x) =
+​ ​
+
+∑i mi
+​
+
+​ ​
+
+hi token hidden state
+m 1 1 1 1 1 0 0 mi mask: 1 = real token, 0 = padding
+e(x) sentence embedding
+Padding must not dilute the
+average.
+
+e(x)
+
+Does Pooling Alone Give Good Embeddings?
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+The cast gave strong performances
+cos 0.71 ✕
+
+The film's science is accurate
+
+Its physics is realistic
+
+The unrelated sentence is closer than the paraphrase: not yet semantic.
+Illustrative 2D sketch of an untrained pooling space. Cosine scores are illustrative high-dimensional values, not read from the 2D positions.
+
+Does Pooling Alone Give Good Embeddings?
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+The cast gave strong performances
+cos 0.71 ✕
+
+The film's science is accurate
+
+cos 0.38 ✕
+
+Its physics is realistic
+
+The unrelated sentence is closer than the paraphrase: not yet semantic.
+Illustrative 2D sketch of an untrained pooling space. Cosine scores are illustrative high-dimensional values, not read from the 2D positions.
+
+Learning to Bring Similar Sentences Together
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+The cast gave strong performances
+
+The film's science is accurate
+
+Its physics is realistic
+
+pull together
+positive pair
+
+Training reshapes the space with pairs of similar and dissimilar texts.
+The motion illustrates the training objective, not the exact optimization trajectory.
+
+Learning to Bring Similar Sentences Together
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+The cast gave strong performances
+
+The film's science is accurate push apart
+negative pair
+
+Its physics is realistic
+
+pull together
+positive pair
+
+Training reshapes the space with pairs of similar and dissimilar texts.
+The motion illustrates the training objective, not the exact optimization trajectory.
+
+Contrastive Learning: The Objective
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+d⁻ The cast gave strong performances
+
+q The film's science is accurate
+
+s(q, d⁺) high
+
+d⁺ Its physics is realistic
+
+Training pairs: paraphrases, question–answer pairs, entailment labels.
+Conceptual configuration after training. Real systems optimize this ordering over many pairs, typically with in-batch negatives.
+
+Contrastive Learning: The Objective
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+d⁻ The cast gave strong performances
+
+q The film's science is accurate
+
+s(q, d⁻) low
+
+s(q, d⁺) high
+
+d⁺ Its physics is realistic
+
+Training pairs: paraphrases, question–answer pairs, entailment labels.
+Conceptual configuration after training. Real systems optimize this ordering over many pairs, typically with in-batch negatives.
+
+Contrastive Learning: The Objective
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+d⁻ The cast gave strong performances
+
+q The film's science is accurate
+
+s(q, d⁻) low
+
+s(q, d⁺) high
+
+d⁺ Its physics is realistic
+
+s(q, d⁺) > s(q, d⁻)
+Training pairs: paraphrases, question–answer pairs, entailment labels.
+Conceptual configuration after training. Real systems optimize this ordering over many pairs, typically with in-batch negatives.
+
+The Expensive Way: Score Every Pair
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+Query + Doc 1 Cross-Encoder 0.91
+
+Query + Doc 2 Cross-Encoder 0.12
+
+Query + Doc 3 Cross-Encoder 0.07
+⋮
+
+Query + Doc 10⁶ Cross-Encoder 0.03
+
+Joint scoring is expressive, but it is too slow for first-stage search.
+
+The Expensive Way: Score Every Pair
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+Query + Doc 1 Cross-Encoder 0.91
+
+Query + Doc 2 Cross-Encoder 0.12
+
+Query + Doc 3 Cross-Encoder 0.07
+⋮
+
+Query + Doc 10⁶ Cross-Encoder 0.03
+
+1 query × 1,000,000 documents = 1,000,000 joint forward passes
+
+Joint scoring is expressive, but it is too slow for first-stage search.
+
+Encode Separately, Compare Later
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+JOINT ENCODING SEPARATE ENCODING
+
+Query Document Encoder
+
+Document Cross-Encoder score computed once, then reused
+
+Query Encoder
+The pair is encoded together,
+again for every new pair. cos(query, doc)
+× N documents Only the query is encoded
+when the user asks.
+
+Document vectors are computed once and reused for every query.
+
+Sentence-BERT: A Reusable Text Encoder
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+1 · Shared weights
+the same BERT encodes both
+sentences, one at a time
+
+2 · One vector each
+pooling gives u and v,
+which can be stored
+3 · Train vs. search
+training: classify (u, v, |u − v|)
+search: compare u and v
+Alammar & Grootendorst (2024), Figure 10-7, after Reimers & Gurevych (2019). Highlights added.
+
+Meaning Becomes Geometry
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+Texts with similar meaning should occupy nearby regions.
+Alammar & Grootendorst (2024), Figure 8-4.
+
+Cosine Similarity: Compare Directions
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+q
+
+d
+θ
+
+Toy 2-D vectors: q = (3, 4), d = (4, 3). Real embeddings have hundreds of dimensions.
+
+Cosine Similarity: Compare Directions
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+2d
+
+q·d
+q cos θ =
+‖q‖ ‖d‖
+d
+angle, not length
+θ
+2d has the same angle,
+so the same cosine
+
+Toy 2-D vectors: q = (3, 4), d = (4, 3). Real embeddings have hundreds of dimensions.
+
+Cosine Similarity: A Worked Example
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+① dot product
+q · d = 3·4 + 4·3 = 24
+q
+② lengths
+d ‖q‖ = ‖d‖ = 5
+5
+
+5
+
+After normalization to unit length, the dot product equals the cosine similarity (used again in the search code).
+
+Cosine Similarity: A Worked Example
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+① dot product
+q · d = 3·4 + 4·3 = 24
+q
+② lengths
+d ‖q‖ = ‖d‖ = 5
+5
+θ ≈ 16°
+③ divide
+cos θ = 24 / (5·5) = 0.96
+5
+④ normalize first
+q̂·d̂ = 0.6·0.8 + 0.8·0.6 = 0.96
+
+After normalization to unit length, the dot product equals the cosine similarity (used again in the search code).
+
+Quick Challenge: Which Sentence Is Closer?
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+A The film's physics was
+praised as realistic
+
+B The science-fiction genre
+influenced its design
+
+QUERY
+How accurate is the science
+C The cast gave strong
+performances
+in Interstellar?
+
+Predict first: which sentence is closest to the query?
+Toy 2-D semantic space; the three candidates are placed at angles from the query.
+
+Answer: Direction Decides
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+A The film's physics was
+praised as realistic
+0.97
+
+B The science-fiction genre
+influenced its design
+0.62
+
+QUERY
+How accurate is the science
+C The cast gave strong
+performances
+0.17
+in Interstellar?
+
+B shares “science” but points elsewhere; A shares no keyword, yet is closest.
+Cosine = cos(angle between query and sentence). Angles: A 13°, B 52°, C 80° from the query.
+
+One Embedding Space, Two Applications
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+Topic Discovery Retrieval
+query-free query-conditioned
+what groups exist? which passage answers it?
+
+Embedding space
+
+Topic Discovery is a side application; Retrieval is the main path to RAG.
+
+What If Nobody Asks a Question?
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+no query
+query
+
+Remove the query: the geometry still holds relationships among documents.
+Each dot is one document embedding in a 2-D sketch of the space.
+
+Topics Are Hidden in the Embedding Space
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+Science Cast
+
+Reviews
+
+Documents with related meaning gather into groups; a few fit nowhere.
+Illustrative corpus. Redrawn after Alammar & Grootendorst (2024), Figure 5-1.
+
+Topics Are Hidden in the Embedding Space
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+Science Cast
+
+Reviews
+
+outliers
+
+Documents with related meaning gather into groups; a few fit nowhere.
+Illustrative corpus. Redrawn after Alammar & Grootendorst (2024), Figure 5-1.
+
+UMAP: Keep Neighbours, Reduce Dimensions
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+384-D embeddings reduced space
+
+UMAP
+
+Points that were neighbours stay neighbours in the reduced space.
+Schematic. Clustering can use more than 2 dimensions; a 2-D map is a projection and does not preserve all distances.
+
+UMAP: Keep Neighbours, Reduce Dimensions
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+384-D embeddings reduced space
+
+UMAP
+
+Points that were neighbours stay neighbours in the reduced space.
+Schematic. Clustering can use more than 2 dimensions; a 2-D map is a projection and does not preserve all distances.
+
+HDBSCAN: Dense Regions and Noise
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+dense regions
+
+Clusters emerge from density; sparse points stay unassigned (noise).
+Illustrative. In BERTopic, unassigned points form topic −1, which is typically ignored.
+
+HDBSCAN: Dense Regions and Noise
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+Science Cast
+
+Reviews
+
+dense regions
+
+Clusters emerge from density; sparse points stay unassigned (noise).
+Illustrative. In BERTopic, unassigned points form topic −1, which is typically ignored.
+
+HDBSCAN: Dense Regions and Noise
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+Science Cast
+
+Reviews
+
+dense regions
+
+noise (outliers)
+
+Clusters emerge from density; sparse points stay unassigned (noise).
+Illustrative. In BERTopic, unassigned points form topic −1, which is typically ignored.
+
+But What Does Cluster #7 Mean?
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+“The black hole
+bends light…”
+
+“The simulation modeled
+Cluster #7 an accretion disk…”
+
+“Relativity shapes the
+?
+film's physics…”
+
+The algorithm gives an ID. People still need a description of the group.
+
+c-TF-IDF: Words That Describe a Cluster
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+documents in the cluster
+
+…black hole bends CLASS
+light…
+…relativity shapes one “class document”
+the physics… for the whole cluster
+…accretion disk…
+
+Representative words suggest a label; they do not guarantee one.
+Weights are illustrative. c-TF-IDF treats all documents of a cluster as one class document (Grootendorst, 2022); redrawn after Figure 5-15.
+
+c-TF-IDF: Words That Describe a Cluster
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+documents in the cluster
+term weight in this cluster
+
+…black hole bends
+black hole 0.95
+CLASS
+light…
+…relativity shapes one “class document”
+the physics… for the whole cluster physics 0.82
+…accretion disk…
+
+relativity 0.70
+
+movie 0.24
+
+words common everywhere weigh little
+
+Representative words suggest a label; they do not guarantee one.
+Weights are illustrative. c-TF-IDF treats all documents of a cluster as one class document (Grootendorst, 2022); redrawn after Figure 5-15.
+
+BERTopic: The Whole Pipeline
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+text → vector make the dense groups + words that
+geometry workable outliers describe each topic
+
+Clustering finds the groups; topic representation explains them.
+Alammar & Grootendorst (2024), Figure 5-16 (cropped). Highlights and captions added.
+
+Back to Our Question
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+Science Cast
+
+Reviews
+query
+
+Topic modeling organizes the corpus. Retrieval answers one question.
+
+Back to Our Question
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+Science Cast
+
+Reviews
+query
+query
+
+only the nearest passages matter now
+
+Topic modeling organizes the corpus. Retrieval answers one question.
+
+Where Is the Evidence?
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+Film Club Search
+
+According to our reading pack, how scientifically accurate is Interstellar?
+
+Which passage
+should we return?
+
+the corpus
+
+Search window sketch. The corpus and the Reading Pack are illustrative.
+
+Keyword Search Can Miss the Meaning
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+Keyword search
+
+according to our reading pack, how scientifically accurate is Interstellar?
+
+Plot Notes p.1
+1
+Interstellar is a science-fiction film about a wormhole crew.
+
+Reading Pack §1
+2
+…reading pack: sci-fi night starts at 7 pm…
+
+Production Notes p.5
+3
+The effects team built an accurate lighting simulator.
+
+Shared words can outrank the passage that actually answers the question.
+BM25-style ranking for the running question; yellow = words shared with the query. Passages are illustrative.
+
+Keyword Search Can Miss the Meaning
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+Keyword search
+
+according to our reading pack, how scientifically accurate is Interstellar?
+
+Plot Notes p.1
+1
+Interstellar is a science-fiction film about a wormhole crew.
+
+Reading Pack §1
+2
+…reading pack: sci-fi night starts at 7 pm…
+
+Production Notes p.5
+3
+The effects team built an accurate lighting simulator.
+relevant, but no shared words
+Reading Pack §3
+4
+The black-hole imagery drew on physicists' input.
+
+Shared words can outrank the passage that actually answers the question.
+BM25-style ranking for the running question; yellow = words shared with the query. Passages are illustrative.
+
+BM25: Three Intuitions
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+rare words count more repeats saturate length is normalized
+
+raw count 100 words
+the 0.1
+BM25
+1.83
+
+score
+film 1.2
+900 words
+
+wormhole 3.8 1.10
+
+IDF: how rare the word is term frequency same 3 matches, lower score
+
+Illustrative numbers. Curve and bars computed with k₁ = 1.2, b = 0.75 and average length 300 words; red dots = query-word matches.
+
+BM25: The Formula
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+saturating term frequency
+
+f (t, d) (k1 + 1)
+BM25(q, d) = ∑ IDF(t) ⋅
+​ ​ ​
+
+f (t, d) + k1 (1 − b + b avgdl
+∣d∣
+)
+​ ​ ​ ​
+
+t∈q
+rare words count more
+​ ​ ​
+
+length normalization
+
+f(t,d) = count of term t in passage d · |d| = passage length · k₁, b = tunable
+constants
+
+BM25 ranks by words, not by meaning: a strong lexical baseline.
+
+Semantic Retrieval Finds Related Meanings
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+E(q) and E(d)
+the same encoder and the
+same space as Chapter 1
+
+score(q, d) = cos(E(q),
+E(d))
+rank documents by this
+score
+
+Alammar & Grootendorst (2024), Figure 8-5. The 2-D picture is schematic: ranking uses cosine similarity in the original space.
+
+Two Signals, Two Strengths
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+BM25 · words DENSE · meaning
+
+Plot Notes Reading Pack §3 0.84
+1 1
+Interstellar is a science-fiction film… The black-hole imagery drew on physicist…
+
+Reading Pack §1 Physics Notes 0.79
+2 2
+…reading pack: sci-fi night starts at 7 pm Some of the physics is simplified for th…
+
+Production Notes Review Pack 0.71
+3 3
+The effects team built an accurate lighting… Critics praised the visual effects.
+
+✓ exact words, names, codes ✓ paraphrase and intent
+✗ paraphrases ✗ rare identifiers can blur
+
+Complementary relevance signals, not “old” versus “new”.
+Same question for both columns. Dense scores are cosine similarities; BM25 scores are not comparable to them.
+
+A Document Is Too Big to Search as One Unit
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+500-page document
+Plot
+
+Cast
+
+Science
+one vector
+for everything?
+topics blur together
+Production
+
+Reviews
+
+Science
+
+Retrieval needs units that each hold one idea: chunks.
+Illustrative document; chunks follow section boundaries here. The same example is used on the next slides.
+
+A Document Is Too Big to Search as One Unit
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+a vector per chunk
+500-page document
+Plot chunk 1 · plot
+
+Cast
+chunk 2 · cast
+
+Science
+chunk 3 · science
+
+Production chunk 4 · production
+
+Reviews
+chunk 5 · reviews
+Science
+chunk 6 · science
+
+Retrieval needs units that each hold one idea: chunks.
+Illustrative document; chunks follow section boundaries here. The same example is used on the next slides.
+
+Chunk Size: Focus vs Context
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+Too small “It” has lost what it refers to.
+Gargantua was designed with advice from physicists. It was intended
+to look scientifically plausible. The cast included several well-known actors.
+Critics praised the visual effects.
+
+Illustrative text. The best chunk size depends on the documents, the questions and the retriever.
+
+Chunk Size: Focus vs Context
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+Too small “It” has lost what it refers to.
+Gargantua was designed with advice from physicists. It was intended
+to look scientifically plausible. The cast included several well-known actors.
+Critics praised the visual effects.
+
+Balanced One idea per chunk, with its context.
+Gargantua was designed with advice from physicists. It was intended to look scientifically
+plausible.
+The cast included several well-known actors. Critics praised the visual effects.
+
+Illustrative text. The best chunk size depends on the documents, the questions and the retriever.
+
+Chunk Size: Focus vs Context
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+Too small “It” has lost what it refers to.
+Gargantua was designed with advice from physicists. It was intended
+to look scientifically plausible. The cast included several well-known actors.
+Critics praised the visual effects.
+
+Balanced One idea per chunk, with its context.
+Gargantua was designed with advice from physicists. It was intended to look scientifically
+plausible.
+The cast included several well-known actors. Critics praised the visual effects.
+
+Too large One vector must represent science, cast and reviews at once.
+Gargantua was designed with advice from physicists. It was intended to look scientifically
+plausible. The cast included several well-known actors. Critics praised the visual effects.
+
+Illustrative text. The best chunk size depends on the documents, the questions and the retriever.
+
+Overlap (1): Evidence Cut in Half
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+Q: Was Gargantua designed to look scientifically plausible?
+
+chunk 1 has “Gargantua” but not “plausible”
+Gargantua was designed with advice from physicists.
+
+✂ chunk boundary
+
+Same illustrative text as the previous slide; the boundary falls between two related sentences.
+
+Overlap (1): Evidence Cut in Half
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+Q: Was Gargantua designed to look scientifically plausible?
+
+chunk 1 has “Gargantua” but not “plausible”
+Gargantua was designed with advice from physicists.
+
+✂ chunk boundary
+chunk 2 has “plausible”, but “It” points to nothing
+It was intended to look scientifically plausible. The cast included several well-known actors.
+Critics praised the visual effects.
+
+Neither chunk alone contains the whole answer.
+Same illustrative text as the previous slide; the boundary falls between two related sentences.
+
+Overlap (2): Repeat the Boundary
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+Q: Was Gargantua designed to look scientifically plausible?
+
+chunk 1 now answers the question
+Gargantua was designed with advice from physicists.
+It was intended to look scientifically plausible.
+
+chunk 2 starts with the repeated sentence
+It was intended to look scientifically plausible. The cast included several well-known actors.
+Critics praised the visual effects.
+
+overlap keeps the context across the boundary.
+Costs: duplicated text · more vectors · possibly redundant results
+
+Overlap of one sentence (illustrative). Typical systems overlap by a fraction of the chunk size.
+
+Metadata: Evidence Must Have a Source
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+chunk record
+a stable reference
+chunk_id RP-3.2 to cite: chunk id
+
+source Reading Pack (internal)
+where to find it
+title §3 Science notes source · title · page
+page 3
+date 2026-09
+is it current and
+permissions club members may this user see it?
+
+text “The black-hole imagery drew on physicists' input.”
+
+A vector without provenance cannot become trustworthy evidence.
+Illustrative record. Textbook reference: Alammar & Grootendorst (2024), Figure 8-6.
+
+Before the Query: Build the Index
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+OFFLINE · before any question
+
+Encoder
+
++ metadata
+
+Documents Chunk Embed Index
+raw knowledge retrieval units text → vector vectors + metadata
+
+Do this once, offline: every chunk gets a vector and its metadata.
+
+When the Query Arrives: Encode It Once
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+OFFLINE · already done
+
+Documents Chunk Embed Index
+
+ONLINE · when the user asks
+E(q)
+Question Encoder
+compare with the index
+
+same encoder, same embedding space
+
+Only the question is encoded online; document vectors already wait.
+
+Top-k: Rank by Similarity Score
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+1 Reading Pack §3 0.84 2-D sketch of the space
+RP-3.2
+
+Physics Notes Top-k
+2 0.79
+PHYS-12.1 k=3
+1 2
+3 Review Pack 0.71
+REV-2.1
+
+Production Notes q
+4 0.66 3
+PROD-5.1 4
+5
+5 Plot Notes 0.52 6
+PLOT-1.1
+
+6 Reading Pack §1 0.31
+RP-1.1
+
+The ranking comes from the scores. The 2-D map is only a sketch.
+Scores for the running question; the 2-D positions are illustrative and do not determine the ranking.
+
+A Search Engine in Six Lines
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+docs = encoder.encode(chunks) # (N, d)
+query = encoder.encode([question]) # (1, d)
+docs, query = normalize(docs), normalize(query)
+scores = query @ docs.T # (1, N) cosine
+top_k = np.argsort(-scores[0])[:3] # k = 3
+evidence = [chunks[i] for i in top_k]
+
+query docs scores top_k
+(1, d) (N, d) (1, N) indices
+0.84
+0 1 2
+0.79
+‖q‖ = 1 @ 0.71
+best 3
+‖d‖ = 1 for 0.66
+every row 0.52
+0.31
+
+What Changes at 100 Million Vectors?
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+exact: compare with every vector
+
+ANN indexes trade a little recall for much lower search cost.
+Schematic (70 points). Real systems use structures such as graphs or inverted files; the algorithms are outside this lecture.
+
+What Changes at 100 Million Vectors?
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+approximate: search only the nearest cell
+
+true nearest neighbour,
+just across the boundary: missed
+
+ANN indexes trade a little recall for much lower search cost.
+Schematic (70 points). Real systems use structures such as graphs or inverted files; the algorithms are outside this lecture.
+
+Break: The Retriever Is Ready
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+Chunk Embed + Index Search Evidence LLM
+
+8-minute break
+The retriever is built. Next: how good is it, and how do we use its evidence?
+
+Did We Retrieve the Evidence?
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+ranked results for one question
+
+1 2 3 4 5 6 7 8 9 10
+
+Top-5
+Hit@5 = 1
+at least one relevant result in the top 5
+
+Recall@5 = 2 / 3
+2 of the 3 relevant passages were found
+
+|Relevant ∩ Top-k|
+Recall@k =
+|Relevant|
+
+Illustrative ranking with three relevant passages (ranks 2, 4, 8). With a single relevant passage, Hit@k and Recall@k coincide.
+
+How Early Does the Evidence Appear?
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+Query 1 1 2 3 4 5 6 7 8 RR = 1/1 = 1.00
+
+Query 2 1 2 3 4 5 6 7 8 RR = 1/4 = 0.25
+
+first relevant result at rank 4
+
+MRR = (1.00 + 0.25) / 2 = 0.625
+
+MRR rewards putting the first relevant result near the top.
+Reciprocal rank = 1 / rank of the first relevant result; MRR averages it over queries. Query 2 is our film question with BM25.
+
+Hybrid Retrieval: Fuse the Rankings
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+BM25 RANKING DENSE RANKING FUSED (RRF)
+
+1 Plot Notes 1 Reading Pack §3 1 Reading Pack §3 0.0320
+
+2 Reading Pack §1 2 Physics Notes 2 Plot Notes 0.0318
+
+3 Production Notes 3 Review Pack 3 Production Notes 0.0315
+
+4 Reading Pack §3 4 Production Notes 4 Physics Notes 0.0313
+
+5 Review Pack 5 Plot Notes 5 Reading Pack §1 0.0313
+
+6 Physics Notes 6 Reading Pack §1 6 Review Pack 0.0313
+RRF score(d) = Σ 1 / (60 + rank) over the two rankings
+
+Different score scales: fuse the ranks, or calibrate the scores first.
+Reciprocal Rank Fusion with k = 60, computed from the two lists above (illustrative rankings for the film question).
+
+Retrieve and Rerank (1): Find Candidates
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+TOP-100 CANDIDATES (6 shown)
+
+1 Plot Notes
+
+2 Reading Pack §1
+fast retriever
+1,000,000 3 Production Notes
+chunks BM25 or
+Bi-Encoder
+4 Reading Pack §3
+
+5 Review Pack
+
+6 Physics Notes
+…
+Find plausible candidates fast. The right passage is in the pool, at rank 4.
+First stage here: BM25 (lexical). Sentence-Transformers retrieves about 100 candidates this way, then reranks them.
+
+Retrieve and Rerank (2): Judge Carefully
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+CANDIDATES → RERANKED
+
+Question 1 Plot Notes
++ one passage
+2 Reading Pack §1
+
+3 Production Notes
+Cross-Encoder
+reads the pair jointly
+4 Reading Pack §3
+
+5 Review Pack
+
+6 Physics Notes
+
+The cross-encoder reads each pair jointly and lifts §3 to rank 1.
+Illustrative scores. Reranking improves the order of the candidates; it cannot add a passage that was never retrieved.
+
+Retrieve and Rerank (2): Judge Carefully
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+CANDIDATES → RERANKED
+
+Question 4 Reading Pack §3 0.97
++ one passage top 3 go
+6 Physics Notes 0.91 to the LLM
+
+5 Review Pack 0.58
+Cross-Encoder
+reads the pair jointly
+3 Production Notes 0.22
+
+1 Plot Notes 0.08
+
+relevance score 2 Reading Pack §1 0.05
+
+The cross-encoder reads each pair jointly and lifts §3 to rank 1.
+Illustrative scores. Reranking improves the order of the candidates; it cannot add a passage that was never retrieved.
+
+Retrieval Challenge: Why Is It Missing?
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+BM25 · top-3 (k = 3)
+Which fix would you try first?
+Plot Notes
+1
+Interstellar is a science-fiction film about a…
+A Increase k
+Reading Pack §1
+2
+Reading pack: sci-fi night starts at 7 pm.
+B Add dense retrieval
+Production Notes
+3
+The effects team built an accurate lighting si…
+C Rerank the candidate pool
+cut-off: k = 3
+Reading Pack §3
+relevant, not returned D Rewrite the query
+4
+The black-hole imagery drew on physicists' input.
+
+Which fix first, and why? Several answers are defensible.
+BM25-only retriever with k = 3 for the film question. Passages are illustrative.
+
+The Answer: Several Fixes Can Work
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+found, but 2 more
+A Increase k to 5 1 2 3 4 5 6
+passages in the prompt
+
+rank 1, if the dense
+B Add dense retrieval (RRF) 1 2 3 4 5 6
+retriever is good
+
+rank 1: it was already
+C Rerank the candidate pool 1 2 3 4 5 6
+in the pool
+
+not the cause: the
+D Rewrite the query 1 2 3 4 5 6
+query was specific
+
+Reranking cannot recover a passage that was never retrieved.
+Rank of Reading Pack §3 after each fix; red line = the k results kept (a larger k costs context).
+
+Diagnose Before Replacing the Model
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+what we see likely cause first fix
+
+“What did he do after the question lost Query rewriting:
+graduation?” its entity “…Alan Turing…?”
+
+results from a the search space Metadata filter:
+2019 version is too broad year = 2026
+
+right passage at rank 4 k too small or Raise k, or
+with k = 3 weak ordering rerank the pool
+
+Match the fix to the failure before adding complexity.
+
+The Evidence Is Ready. Now What?
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+retrieved evidence: text + source + score
+PROMPT
+[S1] Reading Pack §3, p.3 0.84
+The black-hole imagery drew on
+physicists' input.
+[S2] Physics Notes, p.12 0.79
+Some of the physics is simplified for
+the story.
+[S3] Review Pack, p.2 0.71
+Critics praised the visual effects.
+
+question
+
+How should the LLM use this evidence?
+Retriever interface: text + source + score. These are the same passages and scores as the Top-k ranking in Chapter 3 (illustrative).
+
+The Evidence Is Ready. Now What?
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+retrieved evidence: text + source + score
+PROMPT
+
+[S1] Reading Pack §3, p.3 0.84
+The black-hole imagery drew on
+physicists' input.
+into [S2] Physics Notes, p.12 0.79
+Some of the physics is simplified for
+the prompt the story.
+[S3] Review Pack, p.2 0.71
+Critics praised the visual effects.
+
+question
+
+How should the LLM use this evidence?
+Retriever interface: text + source + score. These are the same passages and scores as the Top-k ranking in Chapter 3 (illustrative).
+
+RAG = Retrieve + Augment + Generate
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+NEW
+
+R A G
+Retrieve Augment Generate
+question → question + evidence → prompt →
+top-k evidence grounded prompt answer with sources
+
+Retrieval we know. This chapter is about the new middle step.
+
+Which Evidence Should Enter the Context?
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+Reading Pack §3 0.84 180 tok
+
+Reading Pack §3 (copy) 0.83 150 tok
+
+Physics Notes 0.79 220 tok
+
+Review Pack 0.71 150 tok
+
+Interview transcript 0.60 2,400 tok
+
+Box-office report 0.28 120 tok
+
+Top-k is not “paste everything”: select, deduplicate, and respect the budget.
+Illustrative candidates for the film question. Bar lengths are proportional to token counts (the 2,400-token bar is cut).
+
+Which Evidence Should Enter the Context?
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+Reading Pack §3 0.84 180 tok keep
+
+Reading Pack §3 (copy) 0.83 150 tok duplicate
+
+Physics Notes 0.79 220 tok keep
+
+Review Pack 0.71 150 tok keep
+
+Interview transcript 0.60 2,400 tok too long
+
+Box-office report 0.28 120 tok low relevance
+
+Top-k is not “paste everything”: select, deduplicate, and respect the budget.
+Illustrative candidates for the film question. Bar lengths are proportional to token counts (the 2,400-token bar is cut).
+
+Pack the Evidence Into the Context
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+context window: budget 1,000 tokens
+
+SYS [S1] [S2] [S3] Q free: 360 tok
+
+60 180 220 150 30
+
+most relevant first; avoid burying key evidence used 640 / 1,000 tokens
+in the middle of a long context
+
+A finite window: pick, order and budget the evidence before prompting.
+Segment widths are proportional to token counts. Order: strongest evidence first; very long contexts can bury evidence (Liu et al., 2024).
+
+Pack the Evidence Into the Context
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+context window: budget 1,000 tokens
+
+SYS [S1] [S2] [S3] Q free: 360 tok
+
+60 180 220 150 30
+
+most relevant first; avoid burying key evidence used 640 / 1,000 tokens
+in the middle of a long context
+
+left out
+Reading Pack §3 (copy) Interview transcript Box-office report
+duplicate 2,400 tok: does not fit low relevance
+
+A finite window: pick, order and budget the evidence before prompting.
+Segment widths are proportional to token counts. Order: strongest evidence first; very long contexts can bury evidence (Liu et al., 2024).
+
+Build the Grounded Prompt
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+PROMPT
+
+SYSTEM
+Answer only from the evidence. Cite sources like [S1].
+If the evidence is insufficient, say so.
+
+EVIDENCE
+[S1] The black-hole imagery drew on physicists' input.
+LLM
+weights unchanged
+[S2] Some of the physics is simplified for the story.
+[S3] Critics praised the visual effects.
+
+QUESTION
+According to our reading pack, how scientifically accurate is Interstellar?
+
+Adding context changes the current input, not the model parameters.
+Prompt structure from Lecture 9, now with retrieved evidence. Passages are illustrative.
+
+Tell the Model How to Use the Evidence
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+PROMPT
+
+SYSTEM Grounding
+Answer only from the evidence. Cite sources like [S1]. every claim comes from
+If the evidence is insufficient, say so. the evidence
+
+EVIDENCE
+[S1] The black-hole imagery drew on physicists' input.
+Citation
+keep the source
+[S2] Some of the physics is simplified for the story. visible: [S1]
+[S3] Critics praised the visual effects.
+
+Abstention
+QUESTION say “not enough evidence”
+According to our reading pack, how scientifically accurate is Interstellar? instead of guessing
+
+Prompt with evidence injected; see Alammar & Grootendorst (2024), Figure 8-26 (relevant context + question = updated prompt).
+
+Generate an Answer Conditioned on Evidence
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+pθ(y | q) pθ(y | q, E)
+q question E retrieved evidence y the answer
+
+q Conditioning on E makes
+LLM y a supported answer possible.
+E It does not guarantee one.
+
+E = the retrieved evidence placed in the prompt (Lewis et al., 2020). The model weights θ are unchanged.
+
+Which Claims Are Actually Supported?
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+EVIDENCE GENERATED ANSWER
+
+[S1] Reading Pack §3, p.3 The black-hole imagery drew on
+The black-hole imagery drew on physicists' input [S1].
+physicists' input.
+
+[S2] Physics Notes, p.12 The film is scientifically perfect
+Some of the physics is simplified for [S2].
+the story.
+
+[S3] Review Pack, p.2 Critics praised the visuals [S3].
+Critics praised the visual effects.
+
+Check each claim against the source it cites. Do not trust the tag alone.
+
+Citation Is Not Support
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+EVIDENCE GENERATED ANSWER
+supported
+[S1] Reading Pack §3, p.3 The black-hole imagery drew on
+The black-hole imagery drew on physicists' input [S1].
+physicists' input.
+unsupported
+[S2] Physics Notes, p.12 The film is scientifically perfect
+Some of the physics is simplified for [S2].
+the story.
+supported
+[S3] Review Pack, p.2 Critics praised the visuals [S3].
+Critics praised the visual effects.
+
+[S2] says the physics is simplified. Citing [S2] does not make the claim supported.
+
+Green solid line: supported claim. Orange dashed line: cited but unsupported. Passages and claims are illustrative.
+
+The Complete RAG Architecture
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+Retriever Context construction Generator
+finds the select · order · budget · prompt writes a
+evidence grounded answer
+Alammar & Grootendorst (2024), Figure 8-24. Highlights and captions added.
+
+A Mini-RAG in Python
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+query = encoder.encode([question])
+scores = normalize(query) @ docs.T
+ids = np.argsort(-scores[0])[:3]
+evidence = [chunks[i] for i in ids]
+context = select_and_pack(evidence, budget=1000)
+prompt = TEMPLATE.format(context=context, question=question)
+answer = llm.generate(prompt)
+
+5 · context assembly 6 · prompt construction 7 · generation
+
+Pseudocode: encoder, normalize, select_and_pack, TEMPLATE and llm are simplified interfaces. Grey lines were covered on the search-code
+slide.
+
+Same Question, Two Answers
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+Without retrieval With retrieval
+
+USER USER
+According to our reading pack, how According to our reading pack, how
+scientifically accurate is Interstellar? scientifically accurate is Interstellar?
+
+ASSISTANT ASSISTANT
+
+Interstellar is scientifically The black-hole imagery drew on
+flawless. physicists' input [S1], but some
+physics is simplified [S2].
+
+[S1] Reading Pack §3, p.3
+[S2] Physics Notes, p.12
+
+fluent · no source · cannot verify traceable to sources
+
+Retrieval makes an answer checkable, not automatically correct.
+Illustrative answers for teaching. The Film Club and its Reading Pack are hypothetical.
+
+Where Can RAG Go Wrong?
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+Where did the system fail?
+
+Retrieval Context Generation
+find the evidence keep it intact follow it
+
+1 2 3
+Did we find the right passage? Did it reach the model intact? Did the answer follow it?
+failure 1 failure 2 failure 3
+
+RAG quality is not LLM quality alone. Find the first broken stage.
+
+Failure 1: We Never Found the Evidence
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+weak retriever · top-5
+1 Plot Notes
+2 Production Notes
+3 Release Schedule The correct passage is
+4 Box-office Report
+outside the top-k.
+5 Cast Interview The generator never receives it.
+
+cut-off: k = 5
+12 Reading Pack §3
+
+Retrieval Context Generation
+find the evidence keep it intact follow it
+
+Illustrative weak retriever for this failure type (rank 12). Chapter 3 showed fixes: larger k, hybrid retrieval, reranking.
+
+Failure 2a: The Evidence Was Cut
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+retrieved top-5, in rank order (tokens)
+
+#1 #2 #3 #4
+Physics Notes Production Notes Reading Pack §3
+
+context window: budget 700 tokens
+budget full
+SYS #1 #2
+
+#3 does not fit, and #4 (Reading Pack §3) is never
+considered: retrieved, but never included.
+
+Retrieval Context Generation
+find the evidence keep it intact follow it
+
+System C (illustrative): retrieves top-5, packs chunks in rank order until a 700-token budget is full; Reading Pack §3 is rank 4.
+
+Failure 2b: The Evidence Was Buried
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+long context: 9 passages, the evidence is in the middle
+
+1 2 3 4 5 6 7 8 9
+
+[S1] schematic U-shape
+
+use
+“The film is scientifically perfect.”
+
+the evidence was present, but not used position of the evidence
+
+Retrieval Context Generation
+find the evidence keep it intact follow it
+
+Schematic after Liu et al. (2024): models tend to use information at the start or end of a long context better than in the middle.
+
+Failure 3: The Model Ignored the Evidence
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+[S2] Physics Notes, p.12 “The film is
+Some of the physics is simplified for the story. LLM scientifically perfect [S2].”
+
+contradicts the cited source
+
+Retrieval Context Generation
+find the evidence keep it intact follow it
+
+The correct passage is in the prompt, so retrieval and context are fine; the generated claim is unsupported.
+
+Evaluate the Right Component
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+Retrieval Context Generation Answer
+
+relevance sufficiency faithfulness correctness
+
+Hit@k · Recall@k is the needed evidence is every claim supported does it match a
+· MRR in the prompt? by the context? trusted reference?
+
+relevant ≠ current present ≠ used faithful ≠ correct needs ground truth
+
+Relevance, faithfulness and correctness are three different questions.
+Orange boxes: what each check cannot tell you. Correctness requires a trusted reference or verification.
+
+Your Turn: Fix the Broken RAG
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+Q: According to our reading pack, how scientifically accurate is Interstellar?
+
+RETRIEVAL (BM25 only, k = 3) CONTEXT (prompt) ANSWER
+
+1 Plot Notes [S1] Interstellar is a science-fict…
+“The reading pack does
+[S2] Reading pack: sci-fi night sta… not say how accurate
+2 Reading Pack §1
+[S3] The effects team built an accu… the science is.”
+3 Production Notes Q: …how scientifically accurate…?
+
+Retrieval Context Generation
+find the evidence keep it intact follow it
+
+Which stage failed first? What would you change?
+System B (BM25 only, k = 3) on the film question; passages are the illustrative ones from Chapter 3.
+
+Diagnosis: The First Failure Was Retrieval
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+Q: According to our reading pack, how scientifically accurate is Interstellar?
+
+RETRIEVAL (BM25 only, k = 3) CONTEXT (prompt) ANSWER
+
+1 Plot Notes [S1] Interstellar is a science-fict…
+“The reading pack does
+[S2] Reading pack: sci-fi night sta… not say how accurate
+2 Reading Pack §1
+[S3] The effects team built an accu… the science is.”
+3 Production Notes Q: …how scientifically accurate…?
+
+Retrieval Context Generation
+find the evidence keep it intact follow it
+
+Reading Pack §3 ranked #4: outside k = 3, so it never reached the prompt.
+Given that context, “not stated” is an honest answer: generation is not the culprit.
+
+fix: hybrid retrieval + rerank (or a larger k)
+
+From RAG to Agents
+OPENING EMBEDDINGS TOPICS RETRIEVAL RAG DIAGNOSIS
+
+FIXED RAG WORKFLOW AGENTIC DECISION LOOP
+search · calculate · ask
+Question
+Use a tool
+
+Retrieve
+Goal Decide
+Generate Observe
+
+Answer decide again
+Retrieval can be one of the tools.
+the steps are fixed in advance
+
+What if the assistant could decide to search again, use a tool, or ask?

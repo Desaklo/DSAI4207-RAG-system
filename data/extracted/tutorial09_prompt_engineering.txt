@@ -1,0 +1,270 @@
+DSAI4207 / TUTORIAL 9
+
+Prompt Engineering
+Lab
+
+A closer look at prompt design and evaluation
+
+Prompting and fine-tuning
+
+Fine-tuning Today’s prompt experiment
+
+What changes? Model parameters Instructions and examples in the
+input
+
+What stays fixed? The training objective for a Model snapshot and decoding
+run settings
+
+What you Trained checkpoints Outputs on the same dev requests
+compare
+
+The model weights stay frozen throughout this lab.
+
+02 / 17
+
+Input and target JSON
+
+REQUEST
+
+{
+Please book Atlas "room": "Atlas",
+from 14:00 to 15:30. "start_time": "14:00",
+"end_time": "15:30",
+"status": "ready"
+}
+
+Extract the requested room and
+times.
+Identify requests that need
+clarification.
+
+The lab extracts information. It does not check availability or make a reservation.
+
+03 / 17
+
+The four output fields
+
+Field Allowed value
+
+room "Atlas", "Orion", "Lyra", or null
+
+start_time A valid two-digit "HH:MM" string or null
+
+end_time A valid two-digit "HH:MM" string or null
+
+status "ready" or "needs_clarification"
+
+Return one JSON object with exactly these keys. null is a JSON value, not the string "null".
+
+04 / 17
+
+Ambiguity and missing information
+
+Request fragment Expected interpretation
+
+Atlas from 02:00 to 03:00 The explicit two-digit times are valid.
+
+Atlas from 2 to 3 Both times are null under the lab policy.
+
+Atlas starting at 14:00 Keep the start. The end is null.
+
+Atlas at 14:00 for one hour The end remains null. Do not calculate it.
+
+Assess each field independently. Keep clear information when another field is unresolved.
+
+05 / 17
+
+Time order and status
+
+ready requires every information field
+and an end time later than the start.
+
+Start End Status
+
+14:00 15:00 ready
+
+14:00 14:00 needs_clarification
+
+23:00 00:30 needs_clarification
+
+Keep the explicit times. All requests refer to the same day, so do not assume an overnight booking.
+
+06 / 17
+
+Colab setup and live inference
+
+1. Upload the notebook to Colab.
+
+2. Select a GPU runtime.
+
+3. Run setup and model loading once.
+
+4. Check the printed model and device.
+
+Use the supported 1.5B fallback if resources are limited. Record the switch and rerun its baseline.
+
+07 / 17
+
+Baseline and error analysis
+
+THE NOTEBOOK’S BASELINE PROMPT
+
+Extract the room booking request as JSON with exactly these keys:
+room, start_time, end_time, status.
+Rooms: Atlas, Orion, Lyra. Write times as HH:MM.
+Use null for unavailable fields.
+Set status to ready or needs_clarification. Return JSON only.
+
+baseline_rows = run_baseline()
+
+Inspect three failures, or challenging correct cases when the baseline makes fewer errors.
+
+08 / 17
+
+What the evaluation measures
+
+Check Question it answers
+
+JSON parsing Can the response be parsed as one JSON value?
+
+Valid-output rate Do keys, types, allowed values and status agree?
+
+Exact accuracy Does the complete valid object match the gold?
+
+Field accuracy What fraction of individual fields match?
+
+Mean input tokens How much input does the chosen prompt use?
+
+9 / 17
+
+One baseline demonstration
+
+“Book Atlas starting at 02:00 for 90 minutes.”
+
+RECORDED BASELINE EXPECTED UNDER THE CONTRACT
+
+{ {
+"room": "Atlas", "room": "Atlas",
+"start_time": "02:00", "start_time": "02:00",
+"end_time": "03:30", "end_time": null,
+"status": "ready" "status": "needs_clarification"
+} }
+
+Saved 3B CPU BF16 run, dev17. Live classroom outputs may differ.
+
+Valid output can still be wrong. The model inferred an end time that the contract forbids.
+
+10 / 17
+
+Prompt design for this task
+
+Part of the prompt What it needs to express
+
+Task Extract the request into the four specified fields.
+
+Output format One JSON object, exact keys and allowed values.
+
+Boundary rules Unknowns, ambiguous times, corrections and conflicts.
+
+Decision rule When the output should be ready or need clarification.
+
+Add a sentence when it removes a concrete ambiguity. Test whether it changes the intended behavior.
+
+11 / 17
+
+Two prompt revisions
+
+Run What you record
+
+Baseline Inspect three failures or challenging cases.
+
+Revision 1 A specific observed problem and a proposed rule.
+
+Revision 2 A distinct change, its reason and its dev result.
+
+run_revision(MY_PROMPT, REVISION_NOTE)
+
+Keep the model and decoding fixed. Compare repaired cases and newly broken cases.
+
+12 / 17
+
+Fixes and regressions
+
+Before After Interpretation
+
+Wrong Correct A repaired case
+
+Correct Wrong A regression
+
+Wrong Wrong The issue remains, or the error changed
+
+Correct Correct A behavior the revision preserved
+
+The notebook compares the same case IDs. A higher average does not mean every case improved.
+
+13/ 17
+
+Demonstration choices
+
+Examples Comparison
+
+0 Your fixed prompt without demonstrations.
+
+3 A chosen subset from D01–D06. Explain the choice.
+
+6 All examples. Record their order.
+
+run_demo_comparison(MY_PROMPT, DEMO_IDS)
+
+Compare exact accuracy and mean input tokens on the same 18 dev requests.
+
+14 / 17
+
+Five stress tests of your own
+
+Write each expected JSON before running the model.
+
+Difficulty What your case should test
+
+Missing detail A required room or time is absent.
+
+Ambiguous time The wording does not specify a usable time.
+
+Correction or conflict A resolved change differs from an unresolved choice.
+
+Invalid time order The end is equal to or earlier than the start.
+
+Create at least five new requests across different difficulties. Check that each gold label follows the policy.
+
+15 / 17
+
+Final evaluation and evidence
+
+Data Role in the experiment
+
+6 demonstration examples Choose examples from this separate pool.
+
+18 development requests Inspect errors and choose your configuration.
+
+Your 5+ stress cases Probe new wording and task boundaries.
+
+12 final-test requests Evaluate one frozen configuration at the end.
+
+RUN_FINAL_TEST = True
+
+16 / 17
+
+Hands-on checklist
+
+01 Your prompt and two distinct revisions
+
+02 A demonstration comparison with a clear reason
+
+03 Five new stress cases, with gold written first
+
+04 One frozen final test and three reflection sentences
+
+Which change helped? What remains difficult?
+Did the demonstrations justify their extra input tokens?
+
+17 / 17

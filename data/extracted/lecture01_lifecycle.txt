@@ -1,0 +1,600 @@
+Introduction to Large Language Models
+Lecture 1, Part 2: A lifecycle of LLM
+
+Xingyi Yang
+Hong Kong Polytechnic University
+
+A Simple Request Starts the Journey
+
+Me
+Plan a PolyU-to-Victoria-Peak trip
+for tomorrow. Check the weather
+first.
+
+ChatGPT
+Let me check tomorrow’s weather
+before suggesting the route.
+
+The reply takes seconds.
+What had to happen before?
+
+One Answer Runs on Two Clocks
+
+⏱️ What the user sees
+A few seconds
+One request → one answer
+
+≠
+🏗️ What makes it possible
+Months of preparation
+A model built earlier
++ a system working now
+
+One minute on stage, years behind the scenes.
+
+The Model Learned Before You Asked
+
+The weather is ___
+sunny · rainy · cold
+Across a very large collection of text, the model
+repeatedly asks:
+What token is likely to come next?
+
+Repeated prediction builds broad language and knowledge patterns.
+
+Then It Learned to Be Helpful
+
+Human Request + Good Response → Helpful Assistant
+
+Demonstrations Preferences
+Show what a good response Show which response is more
+should look like. useful, clear, and safe.
+
+Later, we will call these ideas SFT and preference-based reinforcement learning.
+
+Press Send: The System Builds Context
+
+For this trip request, the application gathers only what the model can use now.
+
+Instructio Trip
++ History + + Tool info → Context
+ns request
+
+Prepared by the application Changes with this request
+System instructions Trip request and conversation history
+Tool definitions and permissions Retrieved evidence and tool results
+
+Context is the model’s working desk for this request.
+
+Text Becomes Tokens the Model Can Process
+
+Text → Tokens → Token IDs
+
+The Model Generates One Token at a Time
+
+Current context
+↓
+Transformer
+↓
+Next-token
+probabilities
+↓
+Select one token and
+repeat
+Each new token becomes part
+of the context for the next
+prediction.
+
+Fresh Weather Requires a Tool
+
+Missing Request Add result Complete
+→ → →
+weather weather data to context the plan
+
+ChatGPT
+Morning: PolyU → Central · Afternoon: Victoria Peak
+Weather-aware tip: move the Peak visit earlier if rain is expected later.
+
+The application runs the tool; the model decides how to use its result.
+
+The Answer Returns—and Leaves Evidence
+
+Response delivered
+
+User signals Task signals System signals
+Rating, correction, retry, or a Did the route, answer, or tool Latency, tool errors, unsafe or
+changed request call succeed? low-quality output
+
+A response ends one request—but it can become evidence for the next
+model version.
+
+The Full Loop: Build, Execute, Improve
+
+Offline — Build
+Prepare data → Pre-train → Post-train → Evaluate & release
+
+Online — Execute
+Build context → Generate → Use tools or agents → Return a response
+
+Feedback — Improve
+Observe outcomes → Curate data → Improve the next model or system version
+
+Offline builds. Online executes. Feedback improves.
+
+Contents
+
+A. Offline: How an LLM Is Built
+▶ Prepare Data & Model
+
+▶ Pre-train the Base Model
+
+▶ Post-train the Assistant
+
+▶ Optimize & Release
+
+Core question: What data should the model learn from?
+
+An LLM Learns From a Very Large Library
+
+Web + Books + Code + Examples
+Pages and articles Long-form writing Programs and docs Carefully selected tasks
+
+The model does not read like a person—it learns recurring patterns
+across tokens.
+
+Data Is Not Automatically Usable
+
+⚖️ 🤐
+Rights Privacy
+
+🛡️ ✅
+Safety Quality
+“Available” does not mean
+appropriate for training.
+
+Vet every source before it teaches the model.
+
+Clean the Library Before Training
+
+Raw Filter Remove Training
+→ → → Deduplicate →
+corpus quality spam corpus
+
+Garbage in, garbage out—repeated or poor text can teach the wrong
+lesson many times.
+
+The Data Mixture Is the Model's Diet
+
+More code can improve programming skills.
+Language
+More languages can improve multilingual coverage.
+
+Better sources can improve reliability.
+
+A model trained only on cookbooks may
+Domains Quality
+write great recipes—but struggle with
+Python.
+
+Tokenization Creates a Discrete Sequence
+
+Text → Tokens → Token IDs
+
+Contents
+
+A. Offline: How an LLM Is Built
+▶ Prepare Data & Model
+
+▶ Pre-train the Base Model
+
+▶ Post-train the Assistant
+
+▶ Optimize & Release
+
+Core question: How does optimization turn raw text into a base model?
+
+Pre-training Is Still Machine Learning
+
+Fit a model to text by minimizing prediction loss.
+
+1. Objective 2. Training 3. Model
+Predict the next token Backprop + optimizer Transformer
+
+Distributed training runs the same optimization across many GPUs.
+
+Objective: Predict the Next Token
+
+Given the context…
+The cat sat on the _____
+mat 46% floor 24% sofa 12% …
+Actual next token: mat
+
+Objective: give the actual token high probability by minimizing cross-entropy loss.
+
+Objective: Self-Supervision from Raw Text
+
+No human labels
+The text provides both context and target.
+
+RAW TEXT CREATES A TRAINING PAIR
+
+The cat sat on the → mat
+context target
+
+Repeat at every token
+The corpus bootstraps its own supervision.
+
+Raw corpus → automatic targets → scalable pre-training
+
+Step 1: Make a Prediction
+
+FORWARD PASS
+
+Context x LLM Prediction
+from raw text parameters θ P(next token)
+
+Prediction: context x → next-token probabilities.
+
+Step 2: Compute Loss and Gradients
+
+FORWARD PASS
+
+Context x LLM Prediction Loss
+from raw text parameters θ P(next token) compare with target y
+
+BACKPROPAGATION
+
+Compute gradients
+dL/dθ via the chain rule
+
+Self-supervised target: y comes from the same text; backprop gives dL/dθ.
+
+Step 3: Optimize the Parameters
+
+FORWARD PASS
+
+Context x LLM Prediction Loss
+from raw text parameters θ P(next token) compare with target y
+
+BACKPROPAGATION
+
+Optimizer updates θ Compute gradients
+θ ← θ − η · dL/dθ dL/dθ via the chain rule
+
+Optimization: use dL/dθ to update θ, then repeat.
+
+Model: A Transformer Connects the Context
+
+Tokens need context.
+In “river bank”, river clarifies bank.
+Self-attention connects each position
+with relevant earlier tokens.
+Stacked layers produce next-token
+probabilities.
+
+Modern LLMs typically use a decoder-only variant. Diagram: original Transformer architecture
+from Vaswani et al. (2017).
+
+Distributed Training Makes Scale Possible
+
+Split
+Divide data or the model across
+GPUs.
+
+Synchronize
+Exchange gradients during training.
+
+Scale
+Train larger models in practical time.
+Same objective, distributed computation.
+
+The Result Is a Base Model
+
+Massive text corpus Base model
+Language, code, and many → Generates plausible
+domains continuations from context
+
+It learns broad patterns—but prediction is not the same as
+helpfulness.
+
+A Base Model Is Not an Assistant Yet
+
+What it can do What it cannot reliably do
+Continue text fluently Follow user intent
+Imitate learned patterns Stay factual
+Generate code or prose Behave safely
+
+Post-training is needed to shape the predictor into a useful assistant.
+
+Contents
+
+A. Offline: How an LLM Is Built
+▶ Prepare Data & Model
+
+▶ Pre-train the Base Model
+
+▶ Post-train the Assistant
+
+▶ Optimize & Release
+
+Core question: How do demonstrations and preferences turn a predictor into an assistant?
+
+Post-training Teaches Desired Behavior
+
+A pre-trained model predicts plausible text—it is not yet a
+reliable assistant.
+
+Pre-training builds capability; post-training shapes default behavior.
+
+Example: Show How to Follow a Request
+
+Instruction Good response
+“Summarize in one sentence:
+→
+“The launch is now scheduled for Friday.”
+The launch moved from Monday to Friday.”
+
+One demonstration = instruction + desired response
+
+Supervised Fine-tuning from Demonstrations
+
+Training examples
+Collect instruction–response pairs.
+
+Fine-tune
+Update the pre-trained model on those
+examples.
+
+Adapt
+Examples can target domains such as
+medicine, law, or finance.
+
+Collect examples of the behavior you want.
+
+Reinforcement Learning Uses Preferences
+
+Response A Response B
+Clear and follows the Vague or incomplete
+request
+
+A is preferred over B
+Preference → Reward → Optimize
+
+Choose which response is better.
+RL makes preferred responses more likely.
+
+Post-training Can Shape Many Behaviors
+
+🧩 Problem solving
+Worked examples + correctness feedback
+
+🛡️ Safety
+When to answer, refuse, or redirect
+
+🔧 Tool use
+When and how to call a tool
+
+Show good behavior. Reinforce better choices.
+
+The Result Is a Post-trained Assistant
+
+Base model Post-trained model
+Predicts a plausible continuation → Follows instructions like an assistant
+Broad knowledge, weak behavioral control More useful and safer by default
+
+Better behavior still does not guarantee correctness.
+
+Contents
+
+A. Offline: How an LLM Is Built
+▶ Prepare Data & Model
+
+▶ Pre-train the Base Model
+
+▶ Post-train the Assistant
+
+▶ Optimize & Release
+
+Core question: How does the model become practical to use?
+
+Check Before Release
+
+Capability
+Can it complete the target tasks?
+
+Safety
+Does it respect important boundaries?
+
+Reliability
+Does it behave consistently?
+
+Release only when the model fits its users, hardware, and risks.
+
+Compression Helps the Model Fit the Journey
+
+Large model
+High capability, but high memory and
+compute demand.
+
+Smaller model
+Faster, cheaper, and easier to deploy.
+
+Trade-off
+Memory ↓ Delay ↓ Cost ↓
+Some quality may ↓
+
+Compression may trade some quality for practical deployment.
+
+Release Turns a Model Into a Service
+
+Fast enough?
+How long does one answer take?
+
+Affordable?
+How much does each request cost?
+
+Reliable?
+Can many users access it?
+
+Application → serving system → model → response
+
+Contents
+
+B. Online: How an LLM Handles a Request
+▶ Build the Context
+
+▶ Generate a Response
+
+▶ Use Tools & Agents
+
+▶ Check, Deliver & Improve
+
+Core question: What information can the model see?
+
+Online Inference Starts with Context
+
+The model parameters stay fixed; the system assembles
+information for this request.
+
+User Build Generate Return
+request → context → tokens → response
+
+What the model can use now comes from its context.
+
+Context Is Everything the Model Can See
+
+Context changes for
+every request.
+System prompt · role and rules
+It combines instructions,
+conversation, and evidence User request · current task
+into one token sequence.
+History · earlier turns
+If new information is Evidence · retrieved documents
+not in the context,
+the model cannot use Tool results · external information
+it for this request.
+
+Context Grows Across Conversation Turns
+
+When the window fills, older content must be pruned,
+summarized, or retrieved again.
+
+Contents
+
+B. Online: How an LLM Handles a Request
+▶ Build the Context
+
+▶ Generate a Response
+
+▶ Use Tools & Agents
+
+▶ Check, Deliver & Improve
+
+Core question: How does the model form an answer step by step?
+
+Generation Happens One Token at a Time
+
+Append one token, update the context, and repeat until the
+response ends.
+
+Direct Answers vs. Reasoning
+
+Reasoning can help on hard tasks, but it uses more time and compute.
+
+More Test-Time Compute Can Help
+
+More thinking may improve quality—but latency and cost also
+rise.
+
+Contents
+
+B. Online: How an LLM Handles a Request
+▶ Build the Context
+
+▶ Generate a Response
+
+▶ Use Tools & Agents
+
+▶ Check, Deliver & Improve
+
+Core question: How does the model get new information and act?
+
+Tools Bring External Information into Context
+
+Add result
+Question → Call tool →
+to context →
+Answer
+
+Search Calculator API
+Fresh evidence Exact arithmetic External action
+Retrieval reference: Lewis et al. (2020).
+
+An Agent Adds a Loop Around the Model
+
+Agent = model + tools + memory + plan–act–observe loop
+
+Agents Can Continue Working
+
+More autonomy lets the model update its plan after each action.
+
+More Autonomy Requires Clearer Limits
+
+What helps What can go wrong
+A clear task Misunderstands the task
+The right tools Uses the wrong tool
+Useful feedback Has too much permission
+A stopping rule Fails to stop
+
+More autonomy requires clearer permissions, checks, and limits.
+
+Contents
+
+B. Online: How an LLM Handles a Request
+▶ Build the Context
+
+▶ Generate a Response
+
+▶ Use Tools & Agents
+
+▶ Check, Deliver & Improve
+
+Core question: How does the system stay reliable and improve?
+
+Evaluation Needs a Report, Not One Score
+
+Can it do the task? Does it work well? Is it safe enough?
+Knowledge, reasoning, coding, Speed, cost, reliability Privacy, harmful outputs,
+tool use permissions
+
+The best test looks like the real job—not only a classroom quiz.
+
+Safety Tests Find Failures Before Users Do
+
+Hallucination Bias
+
+Privacy exposure Tricky prompts
+
+Leaked data Harmful content
+
+Misuse Agent
+permissions
+
+Tool errors False citations
+
+Data Flywheel
+
+The Lifecycle Keeps Improving
+
+Offline builds
+Large corpora + curated flywheel data → Pre-training → SFT / RL → Evaluation → Release
+
+Online executes
+Request → Context → Generation → Tools or agents → Response
+
+Feedback improves
+Production signals → Curation → Better training data, evaluations, and system design
+
+A useful LLM is not a static model. It is a carefully governed learning and deployment
+loop.

@@ -1,0 +1,1271 @@
+DSAI4207 Introduction to Large Language Models
+Tokenization · Embeddings · Neural Networks
+
+Xingyi Yang
+The Hong Kong Polytechnic University
+
+Two Lectures, One Language Model
+
+LECTURE 2 · PROBABILITY LECTURE 3 · NEURAL
+PERSPECTIVE NETWORK PERSPECTIVE
+
+Define what to learn Implement how it is
+learned
+
+pθ(xt | x<t)
++ Text → vectors →
+logits
+Specify the distribution, loss,
+and evaluation objective. Represent language knowledge
+and optimize all learnable
+parameters.
+
+Together: one complete, trainable language model.
+
+What Probability Already Defined
+
+pθ(xt | x<t)
+
+Conditional probability → NLL / cross-entropy → Perplexity
+
+Lecture 2 defined the target distribution and objective. Today we open pθ and build the
+function that produces it.
+
+What Was Hidden Inside the Black Box?
+
+<s> I like
+? p(tea), p(coffee), …
+
+How can a string become one normalized score for every possible next token?
+
+One Pipeline Implements the Probability Model
+
+Text → Tokens → IDs → Vectors → Network → Logits → Softmax → P(next)
+
+The forward pass turns text into the distribution that Lecture 2 defined.
+
+Bring Back the Same Tiny Corpus
+
+<s> I like ▌
+tea coffee music soup
+
+The corpus from Lecture 2 will now travel through tokens, vectors, logits, probability,
+and loss.
+
+Stage 1: Choose the Symbols
+
+Text → Tokens → IDs → Vectors → Network → Logits → Softmax → P(next)
+
+The tokenizer decides what the abstract symbols xt actually are.
+
+Stage 2: Represent the Symbols
+
+Text → Tokens → IDs → Vectors → Network → Logits → Softmax → P(next)
+
+An embedding turns each discrete ID into a learnable vector.
+
+Stage 3: Compute Scores
+
+Text → Tokens → IDs → Vectors → Network → Logits → Softmax → P(next)
+
+A neural network transforms vectors into one logit per candidate token.
+
+Stage 4: Train the Whole Pipeline
+
+Probability → NLL / CE → Gradients → Update θ
+
+The Lecture 2 objective sends one learning signal back through the network and
+embeddings.
+
+What This Lecture Will Not Cover
+
+Inside today Saved for later
+Tokenization · embeddings · a tiny RNNs · Transformers · self-attention ·
+feed-forward model · softmax · full Word2Vec derivations · matrix
+learning signal calculus
+
+Today’s Roadmap
+
+Text → Tokens → Vectors → Logits → Loss →
+→ → → →
+tokens vectors logits loss updates
+
+Forward computes the probability objective; backward teaches every learnable
+representation.
+
+Chapter 1 · Tokenization
+
+CHAPTER 1 OF 5
+
+1 Tokenization 2 Embeddings
+
+3 Neural Networks 4 Training
+
+5 Summary & Attention Bridge
+
+Core question: What should each model input xt represent?
+
+Where Does xt Come From?
+
+Raw text → Tokens → x1, x2, …, xT → Model
+
+Before a model can process text,
+we must decide what counts as one discrete
+unit.
+
+words subwords characters / bytes
+
+Why Not Just Use Words?
+
+Even English boundaries are Spaces are not universal
+choices boundaries
+I’m learning tokenization—are 今天天气很好
+
+you? +
+A whitespace rule cannot tell us where
+useful model units should begin or end.
+I ’m learning tokenization
+
+— are you ?
+
+A “word” is intuitive to humans, but it is not a universal computational unit.
+
+Even Perfect Words Would Still Fail
+
+frequent head Names
+Xingyi, PolyU, Kowloon
+frequency
+
+Morphology
+learn, learned, relearning
+
+rare / unseen forms New forms
+LLM-powered, GPT-Next
+word rank
+
+Keep every many rare entries → larger
+Keep fewer units more splitting → longer sequences
+word embedding and output tables
+
+Most word types live in the long tail: they are rare, but each would still need a
+vocabulary row.
+
+Vocabulary Size vs. Sequence Length
+
+Characters / Words Subwords
+bytes learning learn ing
+l e a r n
+Huge vocabulary Medium vocabulary
+Small vocabulary Short sequences Medium sequences
+Long sequences
+
+Tokenization fundamentally trades off vocabulary size against sequence length.
+
+BPE: Start Small, Merge Often
+
+set s e t
+
+new n e w
+
+renew r e n e w
+
+reset r e s e t
+
+Count adjacent pairs → Merge a frequent pair → Repeat
+
+Each merge adds one reusable symbol to the vocabulary.
+
+Click to reveal: count → choose → merge → repeat
+
+One BPE Iteration
+
+Pair Count
+
+n+e 3
+
+e+w 2
+
+r+e 2
+
+s+e 2
+
+n + e
+⟶ ne
+
+Count → choose → merge everywhere → rewrite the corpus.
+
+Then Repeat on the New Corpus
+
+new ne w
+
+renew r e ne w
+
+reset r e s e t
+
+Recount → ne + w → new → r + e → re → re + new → renew
+
+Repeated merges turn frequent fragments into reusable larger tokens.
+
+What Does BPE Training Produce?
+
+Learned Ordered merge rules
+vocabulary
+1 n + e → ne
+
+2 ne + w → new
+n e w
++
+3 r + e → re
+ne new
+
+re renew 4 re + new → renew
+
+The learned tokenizer can now be frozen and reused on new text.
+
+Training and Encoding Are Different Jobs
+
+Tokenizer training · once Tokenizer encoding ·
+Training corpus
+every input
+New text
+↓
+Count + merge vs. ↓
+Apply fixed tokenizer
+↓
+Learn vocabulary + merge rules ↓
+Tokens
+
+Encoding applies learned rules; it does not relearn them from each sentence.
+
+Encoding Replays the Learned Rules
+
+r e n e w
+
+↓ apply stored merge priorities
+re new
+
+↓
+renew
+
+The tokenizer converts text into a sequence of symbols from its fixed vocabulary.
+
+A Practical Tokenizer Is a Pipeline
+
+Preprocess Subword
+Raw text → → → Tokens → IDs
+/ normalize encoding
+
+BPE explains how reusable units are learned; the complete tokenizer also defines the
+text-to-ID interface.
+
+Tokens Become Integer IDs
+
+The → model → learns
+
+↓ vocabulary lookup
+
+The → model → learns
+#12 #417 #901
+
+IDs are stable addresses in this tokenizer’s vocabulary.
+
+One Sentence, End to End
+
+The model is relearning.
+
+Raw text → The model is re learn ing → [12, 417, 31, 88, 205, 73]
+
+A tokenizer maps variable-length text to discrete vocabulary IDs using a fixed
+vocabulary and encoding rules.
+
+Checkpoint: Rebuild the Tokenizer Pipeline
+
+?
+What is learned once, and what runs for every input?
+
+Training corpus → Vocabulary + rules
+
+↓ freeze tokenizer
+
+New text → Tokens → IDs
+
+Training can learn the vocabulary and merge rules; encoding applies the fixed
+tokenizer.
+
+IDs Are Not Meaning
+
+Token IDs Model representations
+12 417 901 Numbers must become learned
+≠ vectors before neural computation
+becomes meaningful.
+Discrete vocabulary addresses
+
+Text → Tokens → IDs → Embeddings
+
+Next question: how does an integer ID become a vector the neural network can use?
+
+Chapter 2 · Embeddings
+
+CHAPTER 2 OF 5
+
+1 Tokenization 2 Embeddings
+
+3 Neural Networks 4 Training
+
+5 Summary & Attention Bridge
+
+Core question: How does a token ID become a learned vector?
+
+An Embedding Is a Table Lookup
+
+E ∈ ℝ|V| × d
+
+token ID
+#417
+→ row 417 of E → e417 = E[417, :]
+
+#416 0.1 −0.3 0.2 0.7
+
+#417 0.8 0.2 −0.1 0.6
+
+#418 −0.4 0.5 0.3 0.0
+
+The ID is an address. The embedding is the vector stored at that address.
+
+Lookup Means Retrieve by Address
+
+Token ID
+The entry address.
+
+Table E
+One vector per entry.
+
+Lookup
+Return row E[i, :].
+
+Like a dictionary index, the ID retrieves one entry - here, a numeric vector.
+
+A Token Sequence Becomes a Vector Sequence
+
+IDs: [12, 417, 901] → shared table E → X ∈ ℝT × d
+
+#12 E[12, :]
+
+#417 E[417, :]
+
+#901 E[901, :]
+
+Look up each ID, then stack the rows into X.
+
+Where Do the Numbers in E Come From?
+
+Before learning After learning
+
+→
+randomly initialized vectors vectors shaped by the objective
+
+learning signal → loss ℒ → gradient → update E
+
+The objective gives the table its structure.
+
+Three Ways to Learn an Embedding Table
+
+1 · COUNT 2 · PREDICT 3 · END-TO-END
+
+Corpus → statistics → Corpus → prediction → IDs → E → model →
+E E loss ↩
+
+Count contexts. Predict contexts. Learn with the
+model.
+
+Same lookup operation. Different source of the learning signal.
+
+Way 1 · COUNT - Words Leave Context Fingerprints
+
+store digital information
+
+retrieve digital information
+
+store digital data
+
+eat sweet apricot
+
+store information data sweet
+
+digital 8 7 5 0
+
+information 7 6 2 0
+
+apricot 0 0 0 9
+
+One row of the co-occurrence matrix is a word type's context fingerprint.
+
+Way 1 · COUNT - From Counts to Dense Vectors
+
+Huge context fingerprint Dense embedding
+
+→
+[0, 8, 0, 0, 6, 0, …] [0.62, −0.18, 0.77, …]
+
+dimension ≈ vocabulary size dimension = d
+
+matrix factorization or
+co-occurrence statistics → GloVe objective → dense tableE
+
+Examples SVD: factorize the matrix. GloVe: fit weighted co-occurrence statistics.
+
+Way 1 · COUNT: Corpus → statistics → E.
+
+GloVe: Make Geometry Reflect Global Counts
+
+Fit embeddings Shape the space
+Count globally
+→ Frequent co-occurrence should → Words with related global
+Xij records how often word i
+be predictable from the two context statistics acquire
+appears near context j.
+vectors and their biases. related geometry.
+
+GloVe connects embedding geometry to global co-occurrence statistics.
+
+What Exactly Does GloVe Minimize?
+
+J = ∑i,j f(Xij) (wiTẇj + bi + b̃j − log Xij)2
+
+Xij global co-occurrence count wi, ẇj word and context vectors
+
+downweights unreliable rare pairs
+bi, b̃j learned frequency offsets f(Xij)
+and caps very frequent ones
+
+Minimize the weighted mismatch between a vector-based score and log Xij.
+
+Way 2 · PREDICT - Turn Text into a Guessing Game
+
+the quick brown fox jumps over the
+
+Example
+fox → brown fox → jumps fox → over
+targets
+
+raw corpus → sliding context window → prediction pairs
+
+Nearby words become training targets.
+
+Way 2 · PREDICT - Prediction Shapes Useful Vectors
+
+cat often predicts dog often predicts
+
+≈
+pet food furry animal pet food furry animal
+
+E[cat, :] ≈ E[dog, :]
+
+Similar predictions pull vectors closer.
+
+Way 2 · PREDICT - Word2Vec: CBOW vs. Skip-gram
+
+CBOW Skip-gram
+
+quick brown jumps fox
+vs.
+↓ ↓
+fox brown jumps over
+
+context → center center → context
+
+CBOW predicts the center; Skip-gram predicts the context.
+
+Way 2 · PREDICT - Skip-gram Learns Two Tables
+
+Ein ∈ ℝ|V| × d Eout ∈ ℝ|V| × d
+
+center token fox → vw = Ein[w, :] → score candidate context → uc = Eout[c, :]
+
+Input table Output table
+Center-word vectors; usually retained. Context vectors used for scoring.
+
+The prediction loss trains both tables.
+
+Way 2 · PREDICT - Train a Small Model, Keep the Table
+
+corpus → prediction pairs → Ein, Eout → prediction loss
+
+Word2Vec fastText
+Keep Ein as static word vectors. Add character n-gram vectors for rare words.
+
+Way 2 · PREDICT: train a predictor, then keep its table.
+
+fastText Builds a Word from Character n-grams
+
+Word2Vec fastText
+playing play lay ayi yin ing …
+→
+one word type → one atomic word vector = sum of character n-
+vector gram vectors
+
+Rare reuse pieces learned share stems and Unseen compose a vector from
+Morphology
+words elsewhere affixes words known n-grams
+
+Subword structure lets related word forms share statistical strength.
+
+From Separate Pretraining to Joint Learning
+
+Pretrain first Learn jointly
+
+Corpus → Word2Vec / GloVe → E → IDs → E → full model → loss
+
+freeze or fine-tune one objective updates all
+parameters
+
+Modern models learn E with the full network.
+
+Way 3 · END-TO-END - E Is Part of the Full Model
+
+token IDs → embedding table E → neural network fθ → prediction ŷ → loss ℒ
+
+θ = {E, θnet}
+
+The final task loss updates E and the network together.
+
+Way 3 · END-TO-END - The Final Loss Updates E
+
+ID #417 → e = E[417, :] → network → prediction → loss ℒ
+
+gradient flows backward
+
+∇E[417, :]ℒ = ∑t : idt=417 ∇etℒ
+
+Forward Backward
+lookup selects a row of E. ↔ the gradient for that vector accumulates back into
+the embedding parameters.
+
+Way 3 · END-TO-END: the final loss improves the embedding.
+
+Three Ways, One Embedding Table
+
+1 · COUNT 2 · PREDICT 3 · END-TO-END
+
+Corpus → statistics → E Corpus → prediction → E IDs → E → model → loss ↩
+
+SVD GloVe Word2Vec fastText Neural LMs
+
+Same lookup operation: ei = E[i, :]. Different learning signal.
+
+Next: how does a network turn a fixed lookup vector into a contextual
+representation?
+
+☕
+10-Minute Break
+We resume with Neural Networks.
+
+Chapter 3 · Neural Networks
+
+CHAPTER 3 OF 5
+
+1 Tokenization 2 Embeddings
+
+3 Neural Networks 4 Training
+
+5 Summary & Attention Bridge
+
+Core question: How does a network learn representations that make
+vocabulary prediction easier?
+
+We Have Embeddings—What Computes the Prediction?
+
+X ∈ ℝT × d represents the tokens.
+A learned function must turn those vectors into vocabulary
+scores.
+
+Token IDs → Embeddings → Neural layers → Logits
+
+What Does a Neural Network Actually Look Like?
+
+Input Linear Activation Linear Output
+x → W1x + b1 → φ(·) → W2h + b2 → z
+current
+mix features add nonlinearity read out scores one score per token
+representation
+
+Biological inspiration becomes a concrete composition of
+parameterized transformations.
+
+A Neural Network Is a Parameterized Function
+
+z = fθ(x)
+
+Input representation x becomes vocabulary logits z.
+
+The architecture defines the computation. Training chooses the
+parameter values θ.
+
+One Affine Unit: Weights and Bias
+
+x1 w1 ⟶
+weighted sum
+x2 w2 ⟶
+a = wT x + b
+x3 w3 ⟶
+
+Weights control influence and sign. Bias shifts the computation independently of
+the input.
+
+From One Unit to a Matrix Layer
+
+One unit w1T Many units
+w2T
+ai = wiTx + bi ⋮ a = Wx + b
+one row of weights wm T all rows computed together
+
+Matrix multiplication applies many learned weighted sums in
+parallel.
+
+What Can a Linear Map Change?
+
+feature 2 new feature 2
+
+Wx + b
+mix, scale, rotate, shift
+
+feature 1 new feature 1
+
+▶ Open linear-map demo
+
+A linear layer reorganizes a representation, but straight boundaries
+remain straight.
+
+XOR Exposes a Linear Limitation
+
+XOR: no single straight boundary separates the two classes.
+
+A Feature Map Can Make XOR Linear
+
+Original features
+New representation
+1 0
+00 → [0,0,0]
+01 → [0,1,0]
+ψ(x) = [x1, x2, x1x2]T 10 → [1,0,0]
+add one interaction feature 11 → [1,1,1]
+
+0 1 Now a plane can separate the
+classes.
+
+The classifier can stay linear when the representation becomes more
+useful.
+
+Instead of Designing Features, Learn Them
+
+Small example
+ψ(x) = [x1,x2,x1x2]
+we designed the feature
+
+Language has too many useful
+interactions to list by hand.
+
+Hidden layer
+h = ψθ(x) = φ(Wx + b)
+training chooses the features
+
+A hidden layer is a learnable feature map.
+
+Stacked Linear Layers Still Collapse
+
+W2(W1x + b1) + b2
+
+= (W2W1)x + (W2b1 + b2)
+
+Without an activation, two affine layers reduce to one affine layer.
+
+Nonlinearity Prevents the Collapse
+
+a = W 1 x + b1 h = φ(a) z = W2h + b2
+mix features bend or gate the representation read out the new features
+
+The activation makes the intermediate representation nonlinear, so
+the layers can no longer collapse into one matrix.
+
+Activations Used in Modern Networks
+
+ReLU GELU SiLU
+
+max(0, a) aΦ(a) aσ(a)
+simple gate smooth probabilistic gate smooth self-gating
+
+Transformer FFNs commonly use smooth activations such as GELU
+or SiLU. ReLU remains the clearest derivative example.
+
+A Feed-Forward Network Repeats Linear + Activation
+
+Linear Activation Repeat
+a(1) = W(1)x + b(1) h(1) = φ(a(1)) h(ℓ) = φ(W(ℓ)h(ℓ−1) + b(ℓ))
+
+Each block produces the representation consumed by the next block.
+
+A Network Is a Composition of Representation Maps
+
+x h(1) = f(1)(x) h(2) = f(2)(h(1)) z = f(L)(h(L−1))
+→ → →
+embedding representation 1 representation 2 logits
+
+fθ = f(L) ∘ ··· ∘ f(2) ∘ f(1)
+
+Depth Builds a Sequence of Representations
+
+Embedding Combined features Prediction features
+features → patterns useful for the
+→ evidence for vocabulary
+identity and coarse meaning current context candidates
+
+Later layers reuse and recombine features discovered earlier.
+
+A neural network learns a sequence of representations that makes
+the final prediction easier.
+
+First Layer Builds Hidden Features
+
+nonlinear
+→ a = W1x + b1 mix →
+xembedding dimensions
+h = φ(a) hidden
+features
+
+The hidden vector is a learned representation of the input
+embedding.
+
+Output Layer Maps Features to Vocabulary Scores
+
+tea
+
+coffee
+
+h ∈ ℝdh ⟶ soup
+
+music
+
+… |V|
+
+z = W2h + b2, W2 ∈ ℝ|V| × dh, z ∈ ℝ|V|
+
+Each Vocabulary Item Receives One Logit
+
+zi = W2[i, :]h + b2,i
+
+One row of the output matrix produces one unnormalized score.
+
+tea coffee soup
+z=2.1 z=1.4 z=−0.8
+
+One Complete Forward Pass Through the Tiny LM
+
+Lookup Hidden Readout
+i → x = E[i, :] → h = φ(W1x + b1) → z = W2h + b2
+token ID to embedding learned representation vocabulary logits
+
+tea coffee soup
+2.1 1.4 −0.8
+
+Forward computes values from the current parameters. It does not
+change the parameters.
+
+The Same MLP Lives Inside a Transformer Block
+
+Channel mixing at each position
+Token mixing
+
+information moves
+between positions
+Self-Attention, covered next
+
+FFN(xt) = W2φ(W1xt + b1) + b2
+
+The feed-forward network transforms features independently at
+every token position.
+
+What a Position-Wise MLP Cannot Do
+
+Which earlier token should influence this position, and by how
+much?
+The animal did not cross because it
+
+A position-wise MLP transforms each token vector, but it does not
+choose flexible interactions between token positions.
+
+Checkpoint: Embedding → Hidden → Logits
+
+?
+Fill in the forward path and dimensions.
+
+embeddingd → hiddendh → logits|V|
+
+Logits Are Not Probabilities
+
+Logits Probabilities
+Any real number Non-negative
+Need not sum to one vs. Sum to one
+[2.1, 1.4, −0.8] [0.64, 0.32, 0.04]
+
+Logits are scores, not probabilities. How do we turn arbitrary scores
+into probabilities?
+
+Softmax: Exponentiate, Then Normalize
+
+2 · Normalize the total
+1 · Make scores positive
+pi = exp (zi)
+si = exp(zi)
+∑j exp(zj)
+[2.1, 1.4, −0.8] → [8.17, 4.06, 0.45]
+[0.64, 0.32, 0.04], summing to 1
+
+Now the network produces a probability. Next: how do we train it to
+assign the right probability?
+
+Chapter 4 · Training
+
+CHAPTER 4 OF 5
+
+1 Tokenization 2 Embeddings
+
+3 Neural Networks 4 Training
+
+5 Summary & Attention Bridge
+
+Core question: How does a deep network compute every parameter gradient
+efficiently?
+
+One Training Step Has Three Jobs
+
+1 2 3
+Forward Update
+Backward
+Compute predictions and Change the shared
+the loss.
+→ Compute every gradient. → parameters.
+What did the model What caused the error? How should the model
+predict? move?
+
+repeat with the next minibatch ↺
+
+Training Starts with a One-Hot Target
+
+Observed token: tea
+Model output
+vs. y = [1, 0, 0]
+p = [0.64, 0.32, 0.04]
+one position marks the correct
+probability over tea, coffee, soup
+class
+
+For a one-hot target, maximizing likelihood means maximizing ptea—the probability assigned to what actually
+occurred.
+
+Probability distribution → one-hot target → correct-token probability
+→ likelihood.
+
+Likelihood Becomes a Loss We Can Minimize
+
+Negative log-
+Likelihood Log-likelihood likelihood
+∏t pθ(xt | x<t) log ∑t log pθ(xt | x<t) −1 −∑t log pθ(xt | x<t)
+maximize correct-token
+products become sums turn maximization into
+probabilities
+minimization
+
+For one-hot categorical targets, NLL is the same quantity as cross-
+entropy.
+
+Cross-Entropy Reads the Target Probability
+
+ℒt = −∑i=1|V| yi log pi
+
+target tea y = [1, 0, 0] p = [0.64, 0.32, 0.04]
+
+ℒt = −log ptea
+
+For a one-hot target, only the observed token contributes to the loss.
+
+Example: Logits → Probability → Loss
+
+Network scores Softmax Target is tea
+z = [2.1, 1.4, −0.8] p ≈ [0.644, 0.320, 0.036] ℒ = −log(0.644) ≈ 0.440
+
+The loss is the negative log-probability of what happened, not a
+percentage error.
+
+A Batch Loss Averages Valid Token Losses
+
+position observed token model probability NLL
+1 I 0.70 0.357
+2 like 0.50 0.693
+3 tea 0.644 0.440
+
+J(θ) = 0.357 + 0.693 + 0.440 ≈ 0.497
+3
+Training averages valid token losses across a minibatch. Padding
+positions are masked out.
+
+We Know How to Use a Gradient—Where Does It Come From?
+
+Gradient Descent recap New question
+θ ← θ − η∇θJ(θ) How does a deep network compute
+the negative gradient gives the local update direction every component of ∇θJ efficiently?
+
+The Network Is a Computation Graph
+
+LINEAR 1 ACTIVATION LINEAR 2
+INPUT LOSS
+→ a → h → z →
+x ℒ
+W1x + b1 φ(a) W2h + b2
+
+The graph records which values depend on which earlier values.
+
+Chain Rule = Upstream Gradient × Local Derivative
+
+x h u g v f J
+
+Upstream gradient Local derivative
+∂J ∂v
+∂v ∂u
+effect accumulated from later operations how this operation changes its input
+
+∂J = ∂J ∂v
+∂u ∂v ∂u
+
+Every Node Has a Backward Contract
+
+Backward receives
+
+Forward ∂ℒ
+gy =
+∂y
+y = f(x, θ) f
+Backward returns
+receive inputs, produce an output
+∂f ∂f
+gx = gy , gθ = gy
+∂x ∂θ
+
+Each operation needs only its upstream gradient, local values, and
+local derivative rules.
+
+Compute Once, Then Reuse While Moving Backward
+
+∂x
+gℓ = gℓ+1 ℓ+1
+∂xℓ
+One saved downstream gradient becomes the upstream gradient for
+the next operation.
+
+This Reverse Recursion Is Backpropagation
+
+FORWARD · compute and record values →
+
+INPUT LINEAR 1 ACTIVATION LINEAR 2 LOSS
+
+x → a → h → z → ℒ
+
+← BACKWARD · reuse upstream gradients with local derivatives
+
+Backpropagation
+organizes the chain rule as one reverse traversal of the computation graph.
+
+A Layer Produces Input and Parameter Gradients
+
+Forward
+xℓ = fℓ(xℓ−1, θℓ)
+
+Pass to the previous layer Keep for the optimizer
+∂ℒ ∂ℒ ∂fℓ ∂ℒ ∂ℒ ∂fℓ
+= =
+∂xℓ−1 ∂xℓ ∂xℓ−1 ∂θℓ ∂xℓ ∂θℓ
+
+Backward sends one gradient to the earlier graph and records
+another for the current parameters.
+
+Tiny LM: Start at Softmax + Cross-Entropy
+
+INPUT LINEAR 1 ACTIVATION LINEAR 2 LOSS
+
+x ← a ← h ← z ← ℒ
+
+Logit gradient
+Prediction One-hot target
+δ2 = ∂ℒ = p − y
+p = [0.644, 0.320, 0.036] y = [1, 0, 0] ∂z
+= [−0.356, 0.320, 0.036]
+
+The target logit receives a negative gradient; non-target logits receive positive
+gradients.
+
+Why the Logit Gradient Is p − y
+
+INPUT LINEAR 1 ACTIVATION LINEAR 2 LOSS
+
+x ← a ← h ← z ← ℒ
+
+Substitute and
+Differentiate CE Softmax derivative
+simplify
+∂ℒ = −∑ yi ∂pi ∂pi = p (𝟙{i=k} − p )
+i i k ∂ℒ = p − y
+∂zk pi ∂zk ∂zk k k
+∂zk
+
+𝟙{i=k} equals 1 when i=k, otherwise 0; ∑i yi = 1.
+
+Backward Through the Output Layer
+
+INPUT LINEAR 1 ACTIVATION LINEAR 2 LOSS
+
+x ← a ← h ← z ← ℒ
+
+∂ℒ = δ hT
+2
+∂W2
+Forward value ∂ℒ = δ
+2
+z = W2h + b2 ∂b2
+∂ℒ = W Tδ
+2 2
+∂h
+
+The layer records gradients for W2, b2 and passes the hidden-vector gradient
+backward.
+
+Numerical Outer-Product Example
+
+INPUT LINEAR 1 ACTIVATION LINEAR 2 LOSS
+
+x ← a ← h ← z ← ℒ
+
+∂ℒ = δ hT =
+2
+∂W2
+δ2 = [−0.356, 0.320, 0.036]T outer
+product −0.214 −0.071
+h = [0.6, 0.2]T 0.192 0.064
+0.022 0.007
+
+Every matrix entry measures one connection's effect on the current loss.
+
+Backward Through the Activation
+
+INPUT LINEAR 1 ACTIVATION LINEAR 2 LOSS
+
+x ← a ← h ← z ← ℒ
+
+Forward
+a = [1.2, −0.4, 0.7]
+h = ReLU(a)
+ReLU′(a) = [1, 0, 1]
+ReLU′(aj) = 𝟙{aj > 0}
+
+Backward
+δ1 = (W2Tδ2) ⊙ ReLU′(a)
+
+A non-positive ReLU unit passes zero gradient for that example.
+
+Backward Through the Hidden Layer and Embedding
+
+INPUT LINEAR 1 ACTIVATION LINEAR 2 LOSS
+
+x ← a ← h ← z ← ℒ
+
+Hidden weights Hidden bias
+∂ℒ = δ xT ∂ℒ = δ
+1 1
+∂W1 ∂b1
+
+Input vector Embedding row
+∂ℒ = W Tδ ∂ℒ = ( ∂ℒ )T
+1 1
+∂x ∂E[i, :] ∂x
+The backward signal has now reached the selected row of the embedding
+table.
+
+Shared Parameters Accumulate Gradient Contributions
+
+∂ℒ ∂ℒ u
+= ∑u ∈ uses(θ)
+∂θ ∂θ
+
+Reuse in forward means accumulation in backward. Repeated token
+positions and shared weights add their contributions.
+
+One Complete Forward + Backward Pass
+
+Backward signals
+Forward values
+∂ℒ ∂ℒ
+i→x→a→h→z→ℒ 1 → δ2 → → δ1 →
+∂h ∂x
+compute and record local values
+reuse each signal while moving left
+
+Parameter gradients produced along the route
+∇W2ℒ, ∇b2ℒ, ∇W1ℒ, ∇b1ℒ, ∇E[i, :]ℒ
+
+One reverse traversal produces every gradient required by the
+optimizer.
+
+Backprop Computes; Gradient Descent Updates
+
+Backpropagation Gradient Descent
+then
+∇ θℒ θ ← θ − η∇θℒ
+compute how every parameter affects the loss apply the optimizer's update rule
+
+Embeddings E Hidden layer W1, b1 Output layer W2, b2
+
+The learning rate belongs to the optimizer. It is not part of the chain
+rule.
+
+Computational Reuse Is Not Activation Memory
+
+Computational reuse
+Activation memory
+Backprop computes a downstream
+Backward uses values created during
+gradient once and passes it to the
+forward to evaluate local gradients.
+preceding operation.
+keeps required values available
+avoids repeated derivative work
+
+∂L ∂L
+= xT
+ℓ−1
+∂Wℓ ∂xℓ
+​ ​ ​ ​ ​ ​
+
+​ ​
+
+forward activation
+upstream
+
+What Must the Forward Pass Save?
+
+Activation
+Forward stash Backward needs them
+
+x→a→h→z x, a, h ∇W2ℒ = δ2hT
+inference may discard earlier values training keeps values δ1 = (W2Tδ2) ⊙ φ′(a)
+needed later
+
+Training usually uses more memory than inference because
+backward revisits forward activations.
+
+Gradient Checkpointing Trades Recompute for Memory
+
+L1 → L2 → L3 → L4 → L5 → L6
+save drop drop save drop save
+
+backward recomputes missing activations from the nearest
+saved checkpoint
+
+Save more Save fewer
+more memory, less recomputation less memory, more recomputation
+
+Depth Multiplies Local Jacobians
+
+L
+∂L ∂L ∂xℓ
+= ∏
+​
+
+∂x0 ∂xL ∂xℓ−1
+​ ​ ​ ​
+
+ℓ=1
+​ ​ ​
+
+slightly below 1 near 1 slightly above 1
+0.950 ≈ 0.005 ←←←← 1.150 ≈ 117.4
+gradient vanishes signal remains usable gradient explodes
+
+Backprop can be computationally efficient even when a deep gradient
+becomes numerically tiny or huge.
+
+Residual Paths and Pre-Norm Create Gradient Highways
+
+∂xℓ+1 = I + ∂f( LN (xℓ))
+∂xℓ ∂xℓ
+The identity term gives deep Transformer blocks a direct route for
+representations and gradients.
+
+Chapter 5 · Summary & Attention Bridge
+
+CHAPTER 5 OF 5
+
+1 Tokenization 2 Embeddings
+
+3 Neural Networks 4 Training
+
+5 Summary & Attention Bridge
+
+Core question: What complete model have we built, and what capability is
+still missing?
+
+Rebuild the Complete Model Pipeline
+
+Text → Tokens → IDs → Vectors → Network → Logits → Softmax → P(next)
+
+This forward pipeline is the concrete implementation of pθ(xt | x<t).
+
+Probability + Neural Network = Trainable LM
+
+LECTURE 2 · OBJECTIVE LECTURE 3 · MODEL
+
+Judge the distribution Compute the
+distribution
+
+−log pθ(xt | x<t)
++ {E, W, b} ⊂ θ
+Higher probability on real
+language means lower loss. Embeddings and network
+weights represent and
+transform knowledge.
+
+Training loop: forward computes the loss; backward updates the
+representation and predictor together.
+
+Three Learnable Components
+
+Embedding Hidden Output layer
+matrix E transformations Assigns one logit to
+Maps token IDs to Build task-useful each token.
+input vectors. features.
+
+Together these concrete objects make up the abstract parameter set θ.
+
+Three Answers to the Opening Question
+
+1 2 3
+Text enters Knowledge lives The objective teaches
+as reusable token in learned vectors all parameters
+IDs. and through one loss.
+transformations.
+
+The Missing Capability: Token Interaction
+
+The model uses context selectively
+
+How should each position choose which other positions to read?
+
+From Independent Vectors to Contextual Vectors
+
+● ● ● ● ⟶ ●↔●↔●↔●
+Self-attention will let each token build a context-dependent representation.
+
+Next Lecture: Self-Attention
+
+Q K V
+What am I looking for? What do I contain? What information should
+I pass?
+
+Who should each token attend to—and how much?

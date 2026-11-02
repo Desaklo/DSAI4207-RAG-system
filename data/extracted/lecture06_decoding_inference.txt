@@ -1,0 +1,1151 @@
+Lecture 6: From Probabilities to Generation
+Decoding Strategies & Efficient Inference
+
+DSAI4207 · Introduction to Large Language Models
+
+Xingyi Yang
+Hong Kong Polytechnic University
+
+Manga Studio: Two Questions
+
+Background Prediction → sequence probability → generation
+
+Chapter 1 · Editorial Room Chapter 2 · Production Room
+Decoding Strategies Efficient Inference
+Which continuation should we How can we run generation
+choose? efficiently?
+1. Sequence Search Space 1. Attention Complexity
+2. Greedy and Beam Search 2. Prefill and Decode
+3. Sampling Controls 3. Reuse the Past with KV Cache
+4. Unified Decoding 4. Speculative Decoding and Latency
+
+A Distribution Is Not Yet a Continuation
+
+Known from Lecture 5 Context → Model / LM head → Logits → Softmax
+
+The story so far Artist
+Next-token candidates
+
+monster 0.40
+ghost 0.30
+friend 0.20
+cat 0.10
+Arrive at the door Hear a sound Open the door
+Toy probabilities.
+
+Prompt The hero opens the door and sees a …
+
+Editor
+Which token comes next?
+Decoding Lab Pick the next word yourself
+
+Generation Is a Feedback Loop
+
+Artist predicts Editor chooses
+
+Context Model Distribution Strategy Token
+current Transformer next-token search or one new
+prefix + LM head probabilities sample token
+
+Append token to context
+
+Stop when EOS Token limit Application rule
+
+Predict → choose → append → repeat.
+
+Three Signals Can Stop the Loop
+
+EOS token Token budget Application rule
+A special vocabulary max_new_tokens is A delimiter, schema,
+token. Choosing it reached. or custom rule says
+ends the output. stop.
+
+generate → check stop? → return output
+
+EOS is a token: the model gives it a probability like any other.
+
+From Token Probabilities to Sequence Probability
+
+T
+P (Y ∣ c) = ∏ P (yt ∣ c, y<t )
+​ ​ ​
+
+t=1
+c = prompt; Y = output, including EOS.
+
+The cat EOS
+× ×
+P(The | c) = 0.60 P(cat | c, The) = 0.40 P(EOS | c, The cat) = 0.70
+
+P (The, cat, EOS ∣ c) = 0.60 × 0.40 × 0.70 = 0.168
+
+Multiply the probabilities along the path.
+
+From Sequence Probability to Decoding
+
+T
+S(Y ∣ c) = log P (Y ∣ c) = ∑ log P (yt ∣ c, y<t )
+​ ​ ​
+
+t=1
+
+log 0.60 + log 0.40 + log 0.70 = log 0.168
+
+Search high-scoring paths Sample a continuation
+Greedy / beam search Temperature / top-k / top-p
+Keep high-scoring paths. Draw tokens by probability.
+
+Search follows scores. Sampling draws by probability.
+
+Chapter 1 · Decoding Strategies
+
+Background → 1 · Decoding → 2 · Inference 4 blocks
+
+Sequence Search Space Greedy and Beam Search
+1 2
+Many possible continuations Keep one or B paths
+
+Sampling Controls Unified Decoding
+3 4
+Shape → filter → sample One shared interface
+
+Editorial Room
+Which continuation should we choose?
+
+Sequence Search Space
+
+Background → 1 · Decoding → 2 · Inference Block 1 / 4
+
+Sequence Search Space Greedy and Beam Search
+1 2
+Many possible continuations Keep one or B paths
+
+Sampling Controls Unified Decoding
+3 4
+Shape → filter → sample One shared interface
+
+Editor · Search space
+Which continuations should we keep?
+
+One Distribution Leads to Many Sequence Futures
+
+→
+The cat
+0.24
+→ …
+The The dog
+→ →
+0.60 0.18 → …
+Start
+A A cat → …
+→ →
+0.40 0.08
+→ …
+→
+A dog
+0.28
+
+Each token opens branches. Decoding decides which stay alive.
+
+Exhaustive Sequence Search Is Impossible
+
+Vocabulary branches Generation depth Search space
+|V| × T → |V|T
+
+→ A… → thousands
+→ A
+→ B… → millions
+Start → B
+→ C… → billions
+→ C
+→ … → …
+
+Decoding explores only a small part of this huge space.
+
+Greedy and Beam Search
+
+Background → 1 · Decoding → 2 · Inference Block 2 / 4
+
+Sequence Search Space Greedy and Beam Search
+✓ 2
+Many possible continuations Keep one or B paths
+
+Sampling Controls Unified Decoding
+3 4
+Shape → filter → sample One shared interface
+
+Editor · Active paths
+Keep one path, or keep B paths?
+
+Three Families Cover the Main Decoding Choices
+
+Greedy search Beam search Sampling
+Choose the top Keep the best B Draw by
+token. paths. probability.
+
+Predictable ← decoding behavior → Diverse
+
+Search keeps paths. Sampling draws tokens.
+
+Greedy Search Keeps One Path
+
+yt = arg max P (v ∣ c, y<t )
+​ ​ ​
+
+v∈V
+
+→
+The →
+The cat
+0.60 0.24
+Start → The cat …
+→
+A →
+The dog
+0.40 0.18
+
+Greedy picks the best token now, not the best full sequence.
+
+Decoding Lab Step through greedy
+
+Greedy Can Miss a Higher-Scoring Path
+
+Greedy path Discarded
+0.60 × 0.40 = 0.24 vs. path
+The → cat 0.40 × 0.70 = 0.28
+A → dog
+
+→
+The →
+The cat
+0.60 0.24 best now
+Start ≠
+A A dog best overall
+→ →
+0.40 0.28
+
+Beam Search Keeps B Partial Sequences Alive
+
+Beamt: the best B partial sequences
+
+→
+The cat
+0.24
+
+The The dog
+→ →
+0.60 · keep 0.18 → A dog …
+Start
+A A cat → The cat …
+→ →
+0.40 · keep 0.08
+
+A dog
+→
+0.28
+
+With B=1, beam search becomes greedy search.
+
+Beam Search Repeats Expand, Score, and Prune
+
+Expand Prune
+The cat · 0.24 A dog · 0.28
+Beam
+The · 0.60 → The dog · 0.18 → The cat · 0.24 ↺
+A · 0.40 A cat · 0.08 The dog · 0.18
+
+A dog · 0.28 A cat · 0.08
+
+Expand → score → keep B → repeat.
+
+Decoding Lab Grow the beam tree
+
+Beam Width Trades Search Quality for Cost
+
+B = 2 here. Wider beams explore more paths at higher cost.
+
+Why Can Search Prefer Short Answers?
+
+Which score is higher?
+
+Short · 3 tokens Long · 5 tokens
+
+A B EOS A B C D EOS
+
+−0.4 − 0.6 − 0.8 = −1.8 −0.4 − 0.6 − 0.7 − 0.4 − 0.4 = −2.5
+
+Each extra token adds log P ≤ 0.
+
+Raw scores can favor early EOS.
+
+Compare Scores per Token
+
+What if we compare score per token?
+
+Candidate Raw score S Length T Average S / T
+
+A B EOS −1.8 ✓ 3 −0.60
+
+A B C D EOS −2.5 5 −0.50 ✓
+
+S
+Savg =
+T
+​ ​
+
+T counts all output tokens, including EOS.
+
+Changing the score changes the winner.
+
+Decoding Lab Raw vs. per-token score
+
+Sampling Controls
+
+Background → 1 · Decoding → 2 · Inference Block 3 / 4
+
+Sequence Search Space Greedy and Beam Search
+✓ ✓
+Many possible continuations Keep one or B paths
+
+Sampling Controls Unified Decoding
+3 4
+Shape → filter → sample One shared interface
+
+Editor · Sampling policy
+Must we always choose rank 1?
+
+Sampling Explores Instead of Maximizing
+
+yt ∼ P ( ⋅ ∣ c, y<t )
+​ ​
+
+A 0.40
+B 0.30
+C 0.20
+D 0.10
+Sampling can choose a token that is not ranked first.
+
+Decoding Lab Spin the sampling wheel
+
+Temperature Reshapes the Distribution
+
+pi (τ ) = [softmax(z/τ )]i
+​ ​
+
+0 < τ < 1: sharper
+τ = 1: unchanged
+τ > 1: flatter
+
+Temperature changes the
+probability shape.
+
+Alammar & Grootendorst (2024), Chapter 6
+
+Decoding Lab Drag the temperature
+
+How Uncertain Is the Next-Token Distribution?
+
+Peaked distribution Flatter distribution
+dragon 0.88 dragon 0.30
+ghost 0.05 ghost 0.27
+friend 0.04 friend 0.23
+cat 0.03 cat 0.20
+
+H = 0.496 nats H = 1.375 nats
+
+H(p) = − ∑ pi log pi ​ ​ ​ 0 ≤ H(p) ≤ log 4 ≈ 1.386 nats
+i
+
+Toy tokens · natural log · nats
+
+Entropy measures probability spread.
+
+Temperature Controls Distribution Entropy
+
+exp(zi /τ )
+pi (τ ) = ∝ pi (1)1/τ , τ >0
+​
+
+∑j exp(zj /τ )
+​ ​ ​
+
+​ ​
+
+τ dragon ghost friend cat H · nats
+
+0.5 0.633 0.245 0.090 0.031 0.960
+
+1 0.450 0.280 0.170 0.100 1.247
+
+1.5 0.382 0.278 0.200 0.140 1.321
+
+Same logits · rounded probabilities
+
+Logits → Temperature → Top-k / Top-p → Sample
+
+Temperature shapes. Top-k / top-p filter.
+
+Top-k Keeps a Fixed Number of Token Candidates
+
+Top-k keeps the same count even when uncertainty changes.
+
+Decoding Lab Same k, different contexts
+
+Top-p Keeps an Adaptive Probability Mass
+
+1 sort
+
+2 keep the smallest set reaching p
+
+3 renormalize
+
+4 sample
+
+The candidate count adapts
+to confidence.
+
+Alammar & Grootendorst (2024), Chapter 6
+
+Decoding Lab Watch the nucleus adapt
+
+Top-k Sampling Is Not Beam Search
+
+Top-k sampling Beam search
+Keep k tokens Keep B paths
+Renormalize ≠ Expand paths
+Sample one Score and prune
+Drop the rest Keep paths
+
+token-level filter vs. sequence-level search
+
+Top-k filters tokens. Beam keeps paths.
+
+Generation Can Repeat or Go Off Track
+
+Repetition Loop Unhelpful token
+“learn to learn to learn …” A→B→C→A One bad choice changes
+→B→C→… the context.
+
+Chosen token → Updated context → Next prediction
+
+A poor choice affects later predictions.
+
+Modify the Logits Before Decoding
+
+Reduce repetition Keep valid JSON Control the ending
+
+“dragon dragon dragon "age": 23 ✓ Too short?
+…” "age": "twenty" ✕
+Delay EOS.
+Discourage repeated Allow integer ages.
+tokens.
+
+Controls change token likelihood or validity.
+
+Decoding Lab Break the repetition loop
+
+Sometimes “Likely” Is Not Enough
+
+Task: return JSON with an integer age.
+
+Generated prefix
+{"name":"Alice","age":
+
+Candidate fragment Toy probability Valid next fragment?
+"twenty" 0.35 ✕ string
+23 0.30 ✓ integer
+} 0.15 ✕ missing value
+hello 0.10 ✕ invalid JSON
+other fragments 0.10 depends on prefix
+
+Decoding Lab See what the model prefers
+
+Mask Invalid Tokens Before Decoding
+
+zi = {
+′ zi , i ∈ A(c, y<t )
+p′i = softmax(z ′ )i
+​ ​
+
+−∞, i ∈
+/ A(c, y<t )
+​ ​ ​ ​ ​
+
+​
+
+Allowed-token
+Model logits → mask → Renormalize → Search / sample
+
+Causal attention mask Decoding constraint
+Visible positions. Allowed next tokens.
+
+JSON / schema Function-call arguments Grammar constraints
+
+Valid tokens depend on the current prefix.
+
+Decoding Lab Mask the forbidden fragments
+
+Unified Decoding
+
+Background → 1 · Decoding → 2 · Inference Block 4 / 4
+
+Sequence Search Space Greedy and Beam Search
+✓ ✓
+Many possible continuations Keep one or B paths
+
+Sampling Controls Unified Decoding
+✓ 4
+Shape → filter → sample One shared interface
+
+Editorial Policy Board
+Same artist. Different editorial policy.
+
+One Map Unifies Search and Sampling
+
+Artist predicts Editor chooses
+
+Raw logits → Processors / masks → Candidate scores
+Both branches can restrict invalid tokens.
+
+Score / Search Sampling
+↘
+Greedy
+or Beam Temperature → Top-k / Top-p
+B=1 B>1 ↙ Shape → filter → draw
+Keep high-scoring paths.
+
+token or active paths → append / expand → stop?
+
+Same model. Different decoding policy.
+
+Decoding Lab Compare all strategies
+
+Chapter 2 · Efficient Inference
+
+Background → 1 · Decoding → 2 · Inference 4 blocks
+
+Attention Complexity Prefill and Decode
+1 2
+Cost + causal execution Read → generate
+
+Reuse the Past with KV Speculative Decoding and
+3 Cache 4 Latency
+Reuse past K/V Draft → verify → measure
+
+Client → Production Manager
+A long continuation? Why is it taking so long?
+
+Attention Complexity
+
+Background → 1 · Decoding → 2 · Inference Block 1 / 4
+
+Attention Complexity Prefill and Decode
+1 2
+Cost + causal execution Read → generate
+
+Reuse the Past with KV Speculative Decoding and
+3 Cache 4 Latency
+Reuse past K/V Draft → verify → measure
+
+Production Manager · Computation
+What work grows with the context?
+
+Attention: Count the Work
+
+QK⊤
+O = softmaxrow ( + M) V
+​ ​
+
+dk ​ ​
+
+ₖ
+One head · n positions · key/value widths d , dᵥ
+
+Compare Normalize Combine
+
+QK⊤ : O(n2 dk )
+​
+Scale · mask · row AV : O(n2 dv )
+​
+
+softmax
+
+O(n2 )
+
+More positions mean more query–key pairs.
+
+Full Attention Builds an n × n Score Matrix
+
+Queries ↓ /
+k1 k2 k3 k4 k5
+Keys →
+
+q1 s11 × × × ×
+
+q2 s21 s22 × × ×
+
+q3 s31 s32 s33 × ×
+
+q4 s41 s42 s43 s44 ×
+
+q5 s51 s52 s53 s54 s55
+
+n queries × n keys: about n²/2 scores after masking — still O(n²).
+
+Double the Context, Quadruple the Pairs
+
+QK⊤ ∈ ℝn×n
+
+n → 2n
+n² → 4n²
+Double the context, and
+attention scores grow
+fourfold.
+
+DSAI5207 Transformer lecture · train_complexity.png
+
+KV Cache Lab Double the context
+
+Long Context Quickly Multiplies Attention Work
+
+4K × 4K
+2K × 2K
+1K × 1K
+
+≈ 1M pairs ≈ 4M pairs ≈ 16M pairs
+Long context is costly because every position can meet many others.
+Pairs in the full n×n matrix. The causal mask keeps about half, so the growth is the same.
+
+Attention Is Part of Transformer Cost
+
+Per dense layer · n input positions · model width d
+
+Work at each position Work between positions
+
+Q/K/V + output projections Attention scores + value mixing
+Feed-forward network
+O(n2 d)
+O(nd2 )
+
+Clayer (n, d) = O(nd2 + n2 d)
+​
+
+Generation repeats this work. What can we reuse?
+
+Causal Mask Allows Only the Visible Prefix
+
+Mij = {
+QK⊤ 0, j≤i
+A = softmax( + M) ,
+−∞, j > i
+​ ​ ​ ​
+
+dk ​ ​
+
+query / key k1 k2 k3 k4
+
+q1 visible × × × The rule
+Position i reads only positions j ≤ i.
+q2 visible visible × ×
+Why it matters here
+q3 visible visible visible × A later token never changes an earlier
+position.
+q4 visible visible visible visible
+
+■ visible ■ masked
+
+KV Cache Lab Click a query, see its keys
+
+Teacher Forcing: Known Tokens, One Pass
+
+Training (teacher forcing): the reference text supplies every input token.
+
+Input from data BOS The cat sleeps
+↓
+One causal Transformer pass
+↓
+Predictions p₁ p₂ p₃ p₄
+
+Next-token
+targets
+The cat sleeps EOS
+
+Causal mask: no position can read its own target.
+
+All inputs are known, so one pass predicts every position.
+
+Causal Mask: Training vs Generation
+
+Training · teacher forcing Generation · autoregressive
+The cat sleeps EOS The → cat → sleeps → EOS
+
+Tokens come from the data. Tokens must be chosen.
+Future tokens are hidden. Future tokens do not exist yet.
+One pass, all positions. Choose → append → predict.
+
+Same mask. Known tokens: one pass. New tokens: one at a time.
+
+Prefill and Decode
+
+Background → 1 · Decoding → 2 · Inference Block 2 / 4
+
+Attention Complexity Prefill and Decode
+✓ 2
+Cost + causal execution Read → generate
+
+Reuse the Past with KV Speculative Decoding and
+3 Cache 4 Latency
+Reuse past K/V Draft → verify → measure
+
+Production Manager · Schedule
+Process the prompt, then continue token by token.
+
+Prefill and Decode: Parallel vs Sequential
+
+Prefill Decode
+All prompt tokens are known. New tokens must be chosen.
+
+x₁ x₂ x₃ x₄ y₁ → y₂ → y₃
+
+One causal model pass Choose → append → predict
+
+Process positions in parallel. Generate sequentially.
+
+Both phases use causal attention.
+
+Inference Has a Prefill Phase and a Decode Phase
+
+Prefill · every prompt position, one pass Decode · one new token per step
+
+Prefill reads the prompt. Decode adds one token at a time.
+
+Alammar & Grootendorst (2024), Figures 3-8 and 3-2 · the same prompt
+
+Recomputing the Whole Prefix Wastes Work
+
+Could we keep the old K/V instead?
+
+KV Cache Lab Spot the repeated work
+
+Reuse the Past with KV Cache
+
+Background → 1 · Decoding → 2 · Inference Block 3 / 4
+
+Attention Complexity Prefill and Decode
+✓ ✓
+Cost + causal execution Read → generate
+
+Reuse the Past with KV Speculative Decoding and
+3 Cache 4 Latency
+Reuse past K/V Draft → verify → measure
+
+Production Manager · K/V records t₁ t₂ t₃
+Keep past K/V. Read them again. K₁ V₁ K₂ V₂ K₃ V₃
+
+Past Keys and Values Do Not Change
+
+Each layer reuses old K/V and computes only new qt, kt, vt.
+
+KV Cache: Save, Append, Attend
+
+1 · Prefill once 2 · New token 3 · Append
+Store the prompt’s Compute qt, kt, vt. and attend
+K/V. Save new K/V;
+read the full cache.
+
+Reuse past K/V. Attend with the new query.
+
+KV Cache Removes Old-Position Work
+
+One layer · n total context positions · model width d
+
+Recompute the prefix Use the KV cache
+
+Project all n positions. Process one new position.
+Compute all attention rows. Read n cached keys and values.
+
+O(nd2 + n2 d) O(d2 + nd)
+
+Skip old-position work. Still attend to the growing history.
+
+Append the New Key and Value to the Cache
+
+Per-layer
+cache q_new, k_new, v_new = project(new_token)
+token K V K = append(cache.K, k_new)
+V = append(cache.V, v_new)
+x1 K1 V1
+y = attention(q_new, K, V)
+x2 K2 V2 cache = (K, V)
+
+xt kt vt
+
+Each new token adds one K/V row.
+
+KV Cache: What Computation Is Saved?
+
+Without cache · position t With cache · position t
+Q1:t = X1:t WQ
+​ ​ ​ q t = x t WQ
+​ ​ ​
+
+K1:t = X1:t WK
+​
+​
+​ ​
+​
+K1:t = [Kcache
+​
+
+1:t−1 ; kt ]
+​
+​ ​
+​
+
+V1:t = X1:t WV
+​ ​ ​
+cache
+V1:t = [V1:t−1
+​
+; vt ] ​ ​
+
+Project every position again. Project only the new position.
+
+q t K⊤
+ot = softmax( 1:t
+) V1:t
+​ ​
+
+​ ​ ​
+
+dk ​ ​
+
+Same attention result. Less repeated work.
+
+KV Cache Matrix View · Steps 1 and 2
+
+Blue = cached K/V Red = new Grey = old, not needed again
+Step 1
+Compute the first row.
+Qnew K cache V cache Attention A Output O
+q1 k1 v1 a 11 × × × o1
+Start the cache.
+
+Step 2
+Reuse K/V row 1; add row 2.
+Qnew K cache V cache Attention A Output O
+q2 k1 v1 a 11 × × × o1
+k2 v2 a 21 a 22 × × o2
+Compute query 2 only.
+
+KV Cache Matrix View · Step 3 to General Step
+
+Blue = cached K/V Red = new Grey = old, not needed again
+Step 3
+Keep K/V rows 1–2; add row 3.
+Qnew K cache V cache Attention A Output O
+q3 k1 v1 a 11 × × × o1
+k2 v2 a 21 a 22 × × o2
+k3 v3 a 31 a 32 a 33 × o3
+Cache grows one row.
+
+Step t
+Read old K/V with the new query.
+Qnew K cache V cache Attention A Output O
+qt K 1:t−1 V 1:t−1 A 1:t−1,· old rows o 1:t−1
+kt vt a t,· new row ot
+Read all cached keys.
+
+KV Cache Saves Old Work, Not New Attention
+
+Saved Still computed
+Past K and V but New qt,kt,vt
+kept in the cache qtK1:t⊤ scores
+New weighted sum
+
+Reuse the past. Attend with the new query.
+Only K and V are cached. Old attention rows and outputs are not stored — the next token never needs them.
+
+KV Cache Lab Switch the cache on and off
+
+KV Cache Trades Compute for Memory
+
+Compute saved Memory used What makes it
+Reuse past K/V. Store K/V for each grow?
+active path. Longer context.
+
+Wider beam.
+
+KV memory ∝ context length × active paths
+
+Less repeated compute. More stored K/V.
+
+KV Cache Lab Speed-up vs. memory
+
+KV Cache: What Is Stored?
+
+Each layer keeps K and V.
+
+Layer 1 K¹ V¹ Per layer, one sequence
+
+Layer 2 K² V² K(ℓ) , V(ℓ) ∈ Rn×nKV ×dh ​ ​
+
+Token positions × KV heads × head
+⋮ ⋮ ⋮
+dimension
+Layer L Kᴸ Vᴸ n = number of cached positions.
+
+One K and one V per cached token, per layer.
+
+KV Cache: How Many Bytes?
+
+MKV = 2L n nKV dh b
+​ ​ ​ ​
+
+L layers n cached positions nKV KV heads dh head size b bytes / element
+
+Example: one sequence
+L = 32 · nKV = 32 · dh = 128 · n = 4096 · b = 2 (16-bit)
+2 × 32 × 4096 × 32 × 128 × 2 = 2,147,483,648 bytes = 2 GiB
+
+4096 tokens 8192 tokens 32768 tokens
+2 GiB 4 GiB 16 GiB
+Same model and precision: twice the tokens, twice the cache.
+
+KV Cache Lab Model × context × batch
+
+More Sequences Need More Cache
+
+Mtotal = R × Mone
+​ ​ (equal lengths)
+
+1 sequence 10 sequences 100 sequences
+2 GiB 20 GiB 200 GiB
+Same 4096-token example. R = independent live sequences.
+
+Fewer KV heads Lower precision Better allocation
+GQA / MQA KV quantization Paged KV cache
+
+More live sequences need more cache memory.
+
+Speculative Decoding and Latency
+
+Background → 1 · Decoding → 2 · Inference Block 4 / 4
+
+Attention Complexity Prefill and Decode
+✓ ✓
+Cost + causal execution Read → generate
+
+Reuse the Past with KV Speculative Decoding and
+✓ Cache 4 Latency
+Reuse past K/V Draft → verify → measure
+
+Production Manager · Delivery
+Cache is built. What still makes generation slow?
+
+KV Cache Helps, but Target Calls Still Repeat
+
+The target is the original large model.
+
+Target Target Target Target
+→ → →
+choose y₁ choose y₂ choose y₃ choose y₄
+
+KV cache reduces work inside each target call.
+
+Can one target call help produce several tokens?
+
+Speculative Lab One slow call per word
+
+Known Draft Tokens Can Be Checked Together
+
+Draft model · small, fast helper Target model · original model
+
+Propose a draft Parallel check
+
+x₁ → x₂ → x₃ x₁ x₂ x₃
+The helper guesses sequentially.
+One causal target pass
+
+Evaluate all draft positions together.
+
+Speculative decoding: draft first, then accept or correct.
+
+Speculative Lab Write vs. check: tick the clock
+
+Draft Fast; Verify with the Target Model
+
+KV cache reduces work per call. Speculation amortizes target calls.
+
+Draft
+model
+x₁ → x₂ → x₃ → x₄ → x₅
+Fast, sequential guesses
+
+Reuse prefix K/V. Verify the draft in one pass.
+Target
+model p₁ p₂ p₃ p₄ p₅ p₆
+
+Keep or correct Keep the accepted tokens.
+
+One target pass can commit several tokens.
+
+Speculative Lab Check five guesses in one pass
+
+Accept a Prefix, Correct the First Rejection
+
+x₁ ✓ x₂ ✓ x₃ ✓ x₄ × x₅ discard
+
+pᵢ: target · qᵢ: draft · same prefix
+
+Accept with probability First rejection
+pi ( x i ) Draw a corrected token.
+ai = min(1, )
+​ ​
+
+​
+
+qi (xi )
+​ ​
+​
+
+Discard the remaining draft.
+
+All accepted? Draw one extra target token.
+
+Acceptance + correction preserve target probabilities.
+
+Speculative Lab Keep or reject a draft token
+
+When Does Drafting Save Time?
+
+Cached decode Target Target Target Target
+
+1 token per target call
+
+Draft + verify Draft Target verifies Keep / correct
+
+Several tokens per verification
+
+Accept more Draft cheaply Choose draft length
+
+ˉ tdraft + tverify + tcontrol
+ttoken =
+​ ​
+
+​
+
+m
+m = committed tokens in this round
+
+Lower amortized time? Measure the full response.
+
+Speculative Lab Find the break-even
+
+Latency: How Long Does the User Wait?
+
+KV: less work per call. Speculation: fewer target calls. Less waiting?
+
+Time to First Token Inter-Token Latency End-to-End Latency
+(TTFT) (ITL) (E2E)
+Request → first output Time between outputs Request → last output
+
+Request Output 1 Output 2 Output 3 Last output
+
+TTFT first wait
+
+ITL gaps
+
+E2E full wait
+
+First output · output gaps · total wait.
+
+TTFT Measures the Wait for the First Token
+
+TTFT request sent → first streamed output
+
+Prefill First token
+
+x1 x2 x3 x4 x5 → logits → token 1
+
+choose from prompt
+read prompt · build K/V
+logits
+
+TTFT
+Prefill affects the first wait Cache reuse helps later outputs
+
+KV Cache Lab Longer prompt, later first token
+
+Token Cadence and Total Response Time
+
+ITL Δti = ti − ti−1 ,
+​ ​ ​ i = 2, … , N
+
+Standard decode · one token per output
+◀ cached decode ▶ ◀ cached decode ▶ ◀ cached decode ▶
+token 1 token 2 token 3 token 4
+Δt2 Δt3 Δt4
+
+TTFT before token 1 ITL between later tokens
+
+E2E request → last token
+TTFT Δt 2 Δt 3 … EOS / limit
+
+N
+E2E = tN − treq = TTFT + ∑ Δti
+​ ​ ​ ​
+
+i=2
+
+KV Cache Lab Token cadence and E2E
+
+The Studio: Predict, Choose, Run
+
+Predict Append +
+Context → → Choose token →
+distribution repeat
+
+Artist predicts Editor chooses Manager runs the loop
+Next-token probabilities Search or sample Prefill · KV reuse · draft /
+verify
+
+Feed each chosen token back into the context.
+
+Choose output. Reuse work. Batch checks. Measure time.
+
+Four Questions to Check Your Understanding
+
+Prediction How do token probabilities score a sequence?
+
+Choice Search or sample: what changes?
+
+Reuse What does KV Cache reuse?
+
+Verification Why correct rejected draft tokens?
+
+Explain each answer using one example.
+
+Tutorial: Compare Output and Speed
+
+1 · Strategy 2 · Beam width 3 · KV Cache
+Greedy B ∈ {1, 2, 4, 8} Cache off / on
+
+Beam Time · score · output Warm up · 5 runs
+
+Top-p Median tokens/s
+
+Same prompt · fixed seed
+
+Fix prompt and length. Change one setting.
+
+Lab 1 Decoding Lab 2 KV cache Lab 3 Speculative decoding
+
+Next: How Is the Model Trained?
+
+Lecture 6 Lecture 7 Later
+Use the model Train the model Deploy the model
+Generation & inference Pretraining, data & Compression &
+scaling deployment
+
+Next: learn where the model’s ability comes from.

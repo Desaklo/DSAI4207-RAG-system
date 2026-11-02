@@ -1,0 +1,10 @@
+{
+  "embed_model": "sentence-transformers/all-MiniLM-L6-v2",
+  "num_chunks": 340,
+  "dim": 384,
+  "normalized": true,
+  "backend": "faiss",
+  "embeddings_file": "embeddings.npy",
+  "meta_file": "meta.jsonl",
+  "faiss_file": "faiss.index"
+}
