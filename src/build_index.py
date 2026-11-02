@@ -31,7 +31,12 @@ def load_chunks(path: Path) -> list[dict]:
     return rows
 
 
-def build(chunks_path: Path, index_dir: Path, model_name: str = EMBED_MODEL) -> None:
+def build(
+    chunks_path: Path,
+    index_dir: Path,
+    model_name: str = EMBED_MODEL,
+    chunk_size: str | None = None,
+) -> None:
     chunks = load_chunks(chunks_path)
     if not chunks:
         print(f"No chunks in {chunks_path}", file=sys.stderr)
@@ -91,6 +96,7 @@ def build(chunks_path: Path, index_dir: Path, model_name: str = EMBED_MODEL) -> 
         if faiss_path.exists():
             faiss_path.unlink()
 
+    word_counts = [int(c.get("word_count") or len(str(c.get("text", "")).split())) for c in chunks]
     info = {
         "embed_model": model_name,
         "num_chunks": len(chunks),
@@ -100,7 +106,12 @@ def build(chunks_path: Path, index_dir: Path, model_name: str = EMBED_MODEL) -> 
         "embeddings_file": emb_path.name,
         "meta_file": meta_path.name,
         "faiss_file": faiss_path.name if used_faiss else None,
+        "word_count_min": min(word_counts),
+        "word_count_max": max(word_counts),
+        "word_count_mean": round(sum(word_counts) / len(word_counts), 2),
     }
+    if chunk_size:
+        info["chunk_size"] = chunk_size
     info_path.write_text(json.dumps(info, indent=2) + "\n", encoding="utf-8")
     print(f"Saved embeddings → {emb_path}")
     print(f"Saved meta → {meta_path}")
@@ -112,8 +123,14 @@ def main() -> None:
     parser.add_argument("--chunks", type=Path, default=DEFAULT_CHUNKS)
     parser.add_argument("--index-dir", type=Path, default=DEFAULT_INDEX)
     parser.add_argument("--model", type=str, default=EMBED_MODEL)
+    parser.add_argument(
+        "--chunk-size",
+        choices=["small", "large"],
+        default=None,
+        help="Label stored in index_info.json (small or large demo corpus)",
+    )
     args = parser.parse_args()
-    build(args.chunks, args.index_dir, args.model)
+    build(args.chunks, args.index_dir, args.model, args.chunk_size)
 
 
 if __name__ == "__main__":

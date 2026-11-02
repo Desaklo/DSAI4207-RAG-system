@@ -5,8 +5,13 @@ Usage:
     # Dry-run: retrieve only, print top chunks for sample questions (no API calls)
     python src/run_experiment.py --dry-run
 
+    # Same check on a prebuilt corpus, with BM25 and junk distractors
+    python src/run_experiment.py --dry-run --chunk-size small --retrieval bm25 --junk
+    python src/run_experiment.py --dry-run --chunk-size large --retrieval dense
+
     # Full run (needs OPENAI_API_KEY)
     python src/run_experiment.py
+    python src/run_experiment.py --chunk-size large --retrieval bm25 --junk
 
 Env:
     OPENAI_API_KEY   required for full run
@@ -29,7 +34,12 @@ from dotenv import load_dotenv
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from retriever import Retriever  # noqa: E402
+from retriever import (  # noqa: E402
+    CHUNK_SIZES,
+    RETRIEVAL_MODES,
+    Retriever,
+    resolve_index_dir,
+)
 
 HK = ZoneInfo("Asia/Hong_Kong")
 DEFAULT_QUESTIONS = ROOT / "questions" / "questions.json"
@@ -104,19 +114,30 @@ def now_iso_hk() -> str:
     return datetime.now(HK).isoformat(timespec="seconds")
 
 
-def dry_run(retriever: Retriever, questions: list[dict], sample_n: int = 2, k: int = 4) -> None:
-    print("=== DRY-RUN retrieval (no API calls) ===")
+def dry_run(
+    retriever: Retriever,
+    questions: list[dict],
+    sample_n: int = 2,
+    k: int = 4,
+    retrieval: str = "dense",
+    junk: bool = False,
+) -> None:
+    print(
+        f"=== DRY-RUN retrieval={retrieval} junk={junk} k={k} "
+        f"(no API calls) ==="
+    )
     for q in questions[:sample_n]:
         print("\n" + "=" * 72)
         print(f"Q[{q['id']}]: {q['question']}")
         if q.get("gold_hint_source"):
             print(f"  gold_hint_source: {q['gold_hint_source']}")
-        hits = retriever.search(q["question"], k=k)
+        hits = retriever.search(q["question"], k=k, retrieval=retrieval, junk=junk)
         for i, h in enumerate(hits, 1):
             preview = h["text"][:220].replace("\n", " ")
+            tag = "  JUNK" if h.get("irrelevant") else ""
             print(
                 f"  top{i}: {h['chunk_id']}  score={h['score']:.4f}  "
-                f"src={h['source_file']}"
+                f"src={h['source_file']}{tag}"
             )
             print(f"         {preview}…")
     print("\nDry-run OK.")
@@ -128,6 +149,9 @@ def run_full(
     out_path: Path,
     model: str,
     k_values: list[int],
+    retrieval: str = "dense",
+    junk: bool = False,
+    chunk_size: str | None = None,
 ) -> None:
     client = get_client()
     if client is None:
@@ -146,15 +170,28 @@ def run_full(
             qid = q["id"]
             question = q["question"]
             for k in k_values:
-                hits = retriever.search(question, k=k) if k > 0 else []
+                hits = (
+                    retriever.search(question, k=k, retrieval=retrieval, junk=junk)
+                    if k > 0
+                    else []
+                )
                 user_prompt = build_user_prompt(question, hits)
-                print(f"[{now_iso_hk()}] q={qid} k={k} calling {model}…")
+                print(
+                    f"[{now_iso_hk()}] q={qid} k={k} retrieval={retrieval} "
+                    f"junk={junk} calling {model}…"
+                )
                 answer = call_api(client, model, user_prompt)
                 record = {
                     "question_id": qid,
                     "question": question,
                     "k": k,
+                    "retrieval": retrieval,
+                    "chunk_size": chunk_size or retriever.info.get("chunk_size"),
+                    "junk": junk,
                     "retrieved_chunk_ids": [h["chunk_id"] for h in hits],
+                    "irrelevant_chunk_ids": [
+                        h["chunk_id"] for h in hits if h.get("irrelevant")
+                    ],
                     "retrieved_scores": [round(h["score"], 6) for h in hits],
                     "prompt": {
                         "system": SYSTEM_PROMPT,
@@ -178,7 +215,29 @@ def main() -> None:
     load_dotenv(ROOT / ".env")
     parser = argparse.ArgumentParser(description="DSAI4207 RAG k-curve experiment")
     parser.add_argument("--questions", type=Path, default=DEFAULT_QUESTIONS)
-    parser.add_argument("--index-dir", type=Path, default=DEFAULT_INDEX)
+    parser.add_argument(
+        "--index-dir",
+        type=Path,
+        default=None,
+        help="Index directory. Overrides --chunk-size. Default: data/index",
+    )
+    parser.add_argument(
+        "--chunk-size",
+        choices=CHUNK_SIZES,
+        default=None,
+        help="Use the prebuilt small (~100–150 words) or large (~250–400) index",
+    )
+    parser.add_argument(
+        "--retrieval",
+        choices=RETRIEVAL_MODES,
+        default="dense",
+        help="dense = MiniLM/FAISS, bm25 = lexical",
+    )
+    parser.add_argument(
+        "--junk",
+        action="store_true",
+        help="Mix low-ranked irrelevant chunks into the retrieved context",
+    )
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
     parser.add_argument("--dry-run", action="store_true", help="Retrieve only; no API")
     parser.add_argument("--sample-n", type=int, default=2, help="Questions for dry-run")
@@ -199,17 +258,38 @@ def main() -> None:
 
     questions = load_questions(args.questions)
     print(f"Loaded {len(questions)} frozen questions from {args.questions}")
-    retriever = Retriever(args.index_dir)
+    index_dir = resolve_index_dir(args.chunk_size, args.index_dir)
+    retriever = Retriever(index_dir)
     print(
-        f"Index: {retriever.info['num_chunks']} chunks, "
-        f"backend={retriever.info['backend']}, model={retriever.info['embed_model']}"
+        f"Index: {index_dir}  chunks={retriever.info['num_chunks']}  "
+        f"chunk_size={retriever.info.get('chunk_size', 'custom')}  "
+        f"words={retriever.info.get('word_count_min', '?')}"
+        f"–{retriever.info.get('word_count_max', '?')}  "
+        f"backend={retriever.info['backend']}  "
+        f"retrieval={args.retrieval}  junk={args.junk}"
     )
 
     if args.dry_run:
-        dry_run(retriever, questions, sample_n=args.sample_n, k=args.dry_k)
+        dry_run(
+            retriever,
+            questions,
+            sample_n=args.sample_n,
+            k=args.dry_k,
+            retrieval=args.retrieval,
+            junk=args.junk,
+        )
         return
 
-    run_full(retriever, questions, args.out, args.model, list(args.k))
+    run_full(
+        retriever,
+        questions,
+        args.out,
+        args.model,
+        list(args.k),
+        retrieval=args.retrieval,
+        junk=args.junk,
+        chunk_size=args.chunk_size or retriever.info.get("chunk_size"),
+    )
 
 
 if __name__ == "__main__":

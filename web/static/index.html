@@ -93,6 +93,50 @@
       color: #0b1220;
       font-weight: 600;
     }
+    .ctrl-label {
+      color: var(--muted);
+      font-size: 0.85rem;
+      min-width: 6.5rem;
+    }
+    .switch {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      width: 44px;
+      height: 26px;
+      margin: 0;
+    }
+    .switch input { display: none; }
+    .slider {
+      position: absolute;
+      inset: 0;
+      background: var(--chip);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      cursor: pointer;
+    }
+    .slider::after {
+      content: "";
+      position: absolute;
+      width: 18px;
+      height: 18px;
+      left: 3px;
+      top: 3px;
+      background: var(--text);
+      border-radius: 50%;
+      transition: transform 0.15s ease;
+    }
+    .switch input:checked + .slider {
+      background: var(--danger);
+      border-color: var(--danger);
+    }
+    .switch input:checked + .slider::after { transform: translateX(18px); }
+    .junk-tag {
+      color: var(--danger);
+      font-weight: 650;
+      margin-left: 0.35rem;
+    }
+    details.junk { border-color: #6a3a3a; }
     button {
       background: var(--accent);
       color: #0b1220;
@@ -190,9 +234,9 @@
   <header>
     <h1>DSAI 4207 — RAG demo <span id="modeBadge" class="badge" hidden></span></h1>
     <p>
-      Ask a course question, choose retrieval depth <strong>k ∈ {0,1,2,4,8}</strong>,
-      inspect retrieved chunks, and view the unsupported-claim curve
-      (demo placeholder until experiment + marking are done).
+      Ask a course question, choose <strong>k</strong>, chunk size, dense or BM25 retrieval,
+      and whether to mix in junk context. The unsupported-claim chart stays a demo
+      placeholder until a real experiment is marked.
     </p>
   </header>
 
@@ -203,8 +247,32 @@
       <textarea id="question" placeholder="Type a question about the lecture notes…"></textarea>
 
       <div class="row k-group" id="kGroup" role="radiogroup" aria-label="k">
-        <span style="color:var(--muted);font-size:0.85rem;margin-right:0.25rem;">k =</span>
-        <template id="kTpl"></template>
+        <span class="ctrl-label">k =</span>
+      </div>
+
+      <div class="row k-group" role="radiogroup" aria-label="Chunk size">
+        <span class="ctrl-label">Chunk size</span>
+        <input type="radio" name="chunk_size" id="size_small" value="small" checked />
+        <label class="k-chip" for="size_small">Small</label>
+        <input type="radio" name="chunk_size" id="size_large" value="large" />
+        <label class="k-chip" for="size_large">Large</label>
+      </div>
+
+      <div class="row k-group" role="radiogroup" aria-label="Retrieval mode">
+        <span class="ctrl-label">Retrieval</span>
+        <input type="radio" name="retrieval" id="ret_dense" value="dense" checked />
+        <label class="k-chip" for="ret_dense">Dense</label>
+        <input type="radio" name="retrieval" id="ret_bm25" value="bm25" />
+        <label class="k-chip" for="ret_bm25">BM25</label>
+      </div>
+
+      <div class="row">
+        <span class="ctrl-label">Junk context</span>
+        <label class="switch">
+          <input type="checkbox" id="junkToggle" />
+          <span class="slider"></span>
+        </label>
+        <span class="status" id="junkHint">Off — top matches only</span>
       </div>
 
       <div class="row">
@@ -238,7 +306,7 @@
       </div>
       <h2 style="margin-top:1.25rem;">Live retrieval scores (current query)</h2>
       <p class="status" style="margin-top:-0.25rem;margin-bottom:0.65rem;">
-        After you Ask with k &gt; 0, bars show cosine similarity of each retrieved chunk.
+        After you Ask with k &gt; 0, bars show each chunk’s retrieval score. Junk chunks are red.
       </p>
       <div class="chart-wrap" style="height:220px;">
         <canvas id="scoreChart"></canvas>
@@ -275,6 +343,15 @@
     function selectedK() {
       const r = document.querySelector('input[name="k"]:checked');
       return r ? parseInt(r.value, 10) : 4;
+    }
+
+    function selectedValue(name, fallback) {
+      const r = document.querySelector(`input[name="${name}"]:checked`);
+      return r ? r.value : fallback;
+    }
+
+    function junkOn() {
+      return el("junkToggle").checked;
     }
 
     async function loadHealth() {
@@ -333,9 +410,12 @@
         const d = document.createElement("details");
         if (i === 0) d.open = false;
         const sum = document.createElement("summary");
+        if (c.irrelevant) d.classList.add("junk");
+        const words = c.word_count ? ` · ${c.word_count} words` : "";
+        const junk = c.irrelevant ? `<span class="junk-tag">junk</span>` : "";
         sum.innerHTML = `#${i + 1} <code>${escapeHtml(c.chunk_id)}</code> · `
           + `<span class="score">score ${Number(c.score).toFixed(4)}</span> · `
-          + `${escapeHtml(c.source_file)}`;
+          + `${escapeHtml(c.source_file)}${words}${junk}`;
         const body = document.createElement("div");
         body.className = "body";
         body.textContent = c.text;
@@ -349,6 +429,14 @@
     function updateScoreChart(chunks) {
       const labels = chunks.map((c, i) => `#${i + 1}`);
       const scores = chunks.map((c) => c.score);
+      const mode = chunks[0] && chunks[0].retrieval === "bm25" ? "BM25" : "Dense";
+      const colors = chunks.map((c) =>
+        c.irrelevant ? "rgba(224, 122, 122, 0.75)" : "rgba(91, 159, 212, 0.65)"
+      );
+      const borders = chunks.map((c) =>
+        c.irrelevant ? "rgba(224, 122, 122, 1)" : "rgba(91, 159, 212, 1)"
+      );
+      const maxScore = scores.reduce((m, s) => Math.max(m, Number(s) || 0), 0);
       const ctx = el("scoreChart").getContext("2d");
       if (scoreChart) scoreChart.destroy();
       scoreChart = new Chart(ctx, {
@@ -356,10 +444,10 @@
         data: {
           labels,
           datasets: [{
-            label: "Retrieval score (cosine)",
+            label: mode === "BM25" ? "BM25 score" : "Dense score (cosine)",
             data: scores,
-            backgroundColor: "rgba(91, 159, 212, 0.65)",
-            borderColor: "rgba(91, 159, 212, 1)",
+            backgroundColor: colors,
+            borderColor: borders,
             borderWidth: 1,
           }],
         },
@@ -367,7 +455,12 @@
           responsive: true,
           maintainAspectRatio: false,
           scales: {
-            y: { beginAtZero: true, max: 1, ticks: { color: "#9aa8bc" }, grid: { color: "#2d3a4f" } },
+            y: {
+              beginAtZero: true,
+              max: maxScore <= 1 ? 1 : undefined,
+              ticks: { color: "#9aa8bc" },
+              grid: { color: "#2d3a4f" },
+            },
             x: { ticks: { color: "#9aa8bc" }, grid: { display: false } },
           },
           plugins: { legend: { labels: { color: "#e7ecf3" } } },
@@ -450,6 +543,9 @@
         return;
       }
       const k = selectedK();
+      const retrieval = selectedValue("retrieval", "dense");
+      const chunk_size = selectedValue("chunk_size", "small");
+      const junk = junkOn();
       el("askBtn").disabled = true;
       el("askStatus").textContent = "Retrieving…";
       el("askStatus").className = "status";
@@ -457,7 +553,7 @@
         const res = await fetch("/api/ask", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ question, k }),
+          body: JSON.stringify({ question, k, retrieval, chunk_size, junk }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || res.statusText);
@@ -472,10 +568,11 @@
         el("genMsg").className =
           data.generation_mode === "openai" ? "status ok" : "status warn";
         renderChunks(data.chunks || []);
+        const junkNote = data.junk ? ", junk on" : "";
         el("askStatus").textContent =
           data.generation_mode === "openai"
-            ? `Done (${data.model || "api"}).`
-            : "Done (retrieval only).";
+            ? `Done (${data.model || "api"}, ${data.retrieval}, ${data.chunk_size}${junkNote}).`
+            : `Done (retrieval only, ${data.retrieval}, ${data.chunk_size}${junkNote}).`;
         el("askStatus").className =
           data.generation_mode === "openai" ? "status ok" : "status warn";
       } catch (e) {
@@ -486,7 +583,15 @@
       }
     }
 
+    function syncJunkHint() {
+      el("junkHint").textContent = junkOn()
+        ? "On — about half of the k chunks are low-ranked distractors"
+        : "Off — top matches only";
+    }
+
     buildKControls();
+    el("junkToggle").addEventListener("change", syncJunkHint);
+    syncJunkHint();
     el("askBtn").addEventListener("click", ask);
     el("loadDemoBtn").addEventListener("click", () => loadCurve(true));
     el("refreshCurveBtn").addEventListener("click", () => loadCurve(false));

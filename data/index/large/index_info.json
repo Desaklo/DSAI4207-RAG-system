@@ -1,0 +1,14 @@
+{
+  "embed_model": "sentence-transformers/all-MiniLM-L6-v2",
+  "num_chunks": 201,
+  "dim": 384,
+  "normalized": true,
+  "backend": "faiss",
+  "embeddings_file": "embeddings.npy",
+  "meta_file": "meta.jsonl",
+  "faiss_file": "faiss.index",
+  "word_count_min": 250,
+  "word_count_max": 499,
+  "word_count_mean": 318.58,
+  "chunk_size": "large"
+}

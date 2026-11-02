@@ -82,6 +82,9 @@ def export(runs_path: Path, out_path: Path) -> int:
                         "label": suggested,  # team fills: supported / unsupported / abstention
                         "notes": "",
                         "retrieved_chunk_ids": "|".join(rec.get("retrieved_chunk_ids") or []),
+                        "retrieval": rec.get("retrieval", ""),
+                        "chunk_size": rec.get("chunk_size") or "",
+                        "junk": rec.get("junk", ""),
                         "timestamp": rec.get("timestamp", ""),
                     }
                 )
@@ -96,6 +99,9 @@ def export(runs_path: Path, out_path: Path) -> int:
         "label",
         "notes",
         "retrieved_chunk_ids",
+        "retrieval",
+        "chunk_size",
+        "junk",
         "timestamp",
     ]
     with out_path.open("w", encoding="utf-8", newline="") as f:
