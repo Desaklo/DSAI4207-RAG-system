@@ -17,6 +17,7 @@ import os
 import sys
 from collections import defaultdict
 from pathlib import Path
+from typing import Literal
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
@@ -29,7 +30,12 @@ sys.path.insert(0, str(ROOT / "src"))
 
 load_dotenv(ROOT / ".env")
 
-from retriever import Retriever  # noqa: E402
+from retriever import (  # noqa: E402
+    CHUNK_SIZES,
+    RETRIEVAL_MODES,
+    Retriever,
+    index_dir_for,
+)
 from run_experiment import (  # noqa: E402
     SYSTEM_PROMPT,
     build_user_prompt,
@@ -39,7 +45,6 @@ from run_experiment import (  # noqa: E402
 )
 
 QUESTIONS_PATH = ROOT / "questions" / "questions.json"
-INDEX_DIR = ROOT / "data" / "index"
 DEMO_CURVE = ROOT / "results" / "demo_curve.json"
 RUNS_PATH = ROOT / "results" / "runs.jsonl"
 MARKING_PATH = ROOT / "results" / "marking_sheet.csv"
@@ -48,24 +53,51 @@ ALLOWED_K = {0, 1, 2, 4, 8}
 
 app = FastAPI(title="DSAI 4207 RAG Demo", version="0.1.0")
 
-_retriever: Retriever | None = None
+_retrievers: dict[str, Retriever] = {}
 
 
-def get_retriever() -> Retriever:
-    global _retriever
-    if _retriever is None:
-        _retriever = Retriever(INDEX_DIR)
-    return _retriever
+def get_retriever(chunk_size: str) -> Retriever:
+    if chunk_size not in CHUNK_SIZES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"chunk_size must be one of {list(CHUNK_SIZES)}",
+        )
+    cached = _retrievers.get(chunk_size)
+    if cached is None:
+        cached = Retriever(index_dir_for(chunk_size))
+        _retrievers[chunk_size] = cached
+    return cached
+
+
+def _index_summary(chunk_size: str) -> dict:
+    info_path = index_dir_for(chunk_size) / "index_info.json"
+    if not info_path.exists():
+        return {"ok": False, "error": f"missing {info_path}"}
+    info = json.loads(info_path.read_text(encoding="utf-8"))
+    return {
+        "ok": True,
+        "num_chunks": info.get("num_chunks"),
+        "word_count_min": info.get("word_count_min"),
+        "word_count_max": info.get("word_count_max"),
+        "word_count_mean": info.get("word_count_mean"),
+        "embed_model": info.get("embed_model"),
+    }
 
 
 class AskRequest(BaseModel):
     question: str = Field(..., min_length=1)
     k: int = Field(4, description="Number of chunks to retrieve")
+    junk: bool = Field(False, description="Mix low-ranked distractors into the k slots")
+    retrieval: Literal["dense", "bm25"] = "dense"
+    chunk_size: Literal["small", "large"] = "small"
 
 
 class AskResponse(BaseModel):
     question: str
     k: int
+    retrieval: str
+    chunk_size: str
+    junk: bool
     answer: str | None
     generation_mode: str  # "openai" | "retrieval_only"
     message: str
@@ -182,15 +214,16 @@ def load_demo_curve() -> dict:
 @app.get("/api/health")
 def health():
     has_key = bool(os.environ.get("OPENAI_API_KEY"))
-    try:
-        r = get_retriever()
-        n_chunks = r.info.get("num_chunks")
-    except Exception as e:
-        return {"ok": False, "error": str(e), "has_api_key": has_key}
+    indexes = {size: _index_summary(size) for size in CHUNK_SIZES}
+    ok = all(item.get("ok") for item in indexes.values())
+    small_n = indexes.get("small", {}).get("num_chunks")
     return {
-        "ok": True,
+        "ok": ok,
         "has_api_key": has_key,
-        "num_chunks": n_chunks,
+        "num_chunks": small_n,
+        "indexes": indexes,
+        "retrieval_modes": list(RETRIEVAL_MODES),
+        "chunk_sizes": list(CHUNK_SIZES),
         "model": os.environ.get("OPENAI_MODEL", "gpt-4o-mini"),
     }
 
@@ -213,15 +246,32 @@ def api_ask(body: AskRequest):
     question = body.question.strip()
     if not question:
         raise HTTPException(status_code=400, detail="question is empty")
+    if body.retrieval not in RETRIEVAL_MODES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"retrieval must be one of {list(RETRIEVAL_MODES)}",
+        )
 
-    retriever = get_retriever()
-    hits = retriever.search(question, k=body.k) if body.k > 0 else []
+    retriever = get_retriever(body.chunk_size)
+    hits = (
+        retriever.search(
+            question,
+            k=body.k,
+            retrieval=body.retrieval,
+            junk=body.junk,
+        )
+        if body.k > 0
+        else []
+    )
     chunks = [
         {
             "chunk_id": h["chunk_id"],
             "source_file": h["source_file"],
             "score": round(float(h["score"]), 6),
             "text": h["text"],
+            "word_count": h.get("word_count"),
+            "irrelevant": bool(h.get("irrelevant")),
+            "retrieval": h.get("retrieval", body.retrieval),
         }
         for h in hits
     ]
@@ -232,6 +282,9 @@ def api_ask(body: AskRequest):
         return AskResponse(
             question=question,
             k=body.k,
+            retrieval=body.retrieval,
+            chunk_size=body.chunk_size,
+            junk=body.junk,
             answer=None,
             generation_mode="retrieval_only",
             message=(
@@ -249,6 +302,9 @@ def api_ask(body: AskRequest):
         return AskResponse(
             question=question,
             k=body.k,
+            retrieval=body.retrieval,
+            chunk_size=body.chunk_size,
+            junk=body.junk,
             answer=None,
             generation_mode="retrieval_only",
             message=f"API call failed ({e}). Retrieved chunks are still shown below.",
@@ -259,6 +315,9 @@ def api_ask(body: AskRequest):
     return AskResponse(
         question=question,
         k=body.k,
+        retrieval=body.retrieval,
+        chunk_size=body.chunk_size,
+        junk=body.junk,
         answer=answer,
         generation_mode="openai",
         message="Answer generated with the experiment system prompt.",
