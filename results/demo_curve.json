@@ -1,0 +1,11 @@
+{
+  "source": "demo",
+  "label": "DEMO / EXAMPLE DATA — not real experiment results",
+  "note": "Honest UI placeholder. Replace after you run the experiment and fill marking_sheet.csv. Real curve appears via GET /api/curve once marking labels exist.",
+  "metric": "unsupported_claim_rate",
+  "k_values": [0, 1, 2, 4, 8],
+  "unsupported_claim_rate": [0.72, 0.58, 0.45, 0.31, 0.28],
+  "support_rate": [0.10, 0.22, 0.35, 0.52, 0.55],
+  "abstention_rate": [0.18, 0.20, 0.20, 0.17, 0.17],
+  "n_claims_per_k": {"0": 40, "1": 40, "2": 40, "4": 40, "8": 40}
+}

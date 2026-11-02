@@ -1,0 +1,2189 @@
+DSAI4207 Introduction to Large Language Models
+Lecture 7: Pretraining, Data & Scaling
+
+Four decisions that turn random weights into a base model.
+
+Xingyi Yang
+Hong Kong Polytechnic University
+
+Lecture 7 · Mission 00 / 85
+
+In last lecture, we sample from the distribution
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+Context Next-token distribution
+The cat sat on the mat
+? mat 0.45 drawn
+floor 0.22
+
+Neural network sofa 0.14
+weights θ bed 0.10
+roof 0.07
+moon 0.02
+Drawn at random, weighted by p: mat
+
+Last lecture, this distribution was given. Today we ask what makes it good.
+
+Lecture 7 · Mission 01 / 85
+
+What makes this distribution good?
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+Same context: “The cat sat on the …”
+Random before training Good after training
+0.45
+training
+0.22
+0.16 0.17 0.17 0.16 0.17 0.17 0.14 0.10 0.07
+0.02
+mat floor sofa bed roof moon mat floor sofa bed roof moon
+Any token is about as likely as any other. Probability sits on tokens that make sense.
+
+Inference uses this distribution. Training learns this distribution.
+
+Goal: training turns a random predicted distribution into an accurate one.
+
+Lecture 7 · Mission 02 / 85
+
+Today’s journey
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+θ0 Task objective Update rule Training data θ*
+random initial state learned state
+
+training
+within a finite compute budget
+
+Key goal: keep the model’s distribution close to the data’s.
+pθ (xt+1 ∣ x≤t ) ≈ pdata (xt+1 ∣ x≤t )
+​ ​ ​ ​ ​ ​
+
+Next: what does the training team start with?
+
+Lecture 7 · Mission 03 / 85
+
+Where Did Those Weights Come From?
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+Your team receives…
+Randomly initialized weights.
+A text collection.
+A finite compute budget.
+
+What should the model predict, and how should an error change θ?
+
+Conceptual story illustration · ChatGPT image generator.
+
+Lecture 7 · Mission 04 / 85
+
+From Random Weights to a Base Model
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+Pretraining learns broad prediction patterns. The base model is a starting point for later
+adaptation.
+
+Source: Alammar & Grootendorst, Chapter 12, Fig. 12.6 · supplied course asset.
+
+Lecture 7 · Mission 05 / 85
+
+Four Decisions, Five Learning Outcomes
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+1 · Training task 2 · Update rule 3 · Training 4 · Compute
+Construct shifted Explain Adam and data budget
+labels. AdamW. Compute overlap; Compare model size
+Compare CLM, judge filtering, and training tokens.
+MLM and coverage and
+denoising. mixture.
+
+By the end, submit one training recipe and justify all four decisions.
+
+Lecture 7 · Mission 06 / 85
+
+We Know How to Predict. How Do We Learn?
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+We can predict a distribution. But how do we know whether it is correct?
+Prefix Next-token distribution Observed target
+
+sat 0.10 sat
+The cat LLM slept 0.60
+weights θ training loss
+ran 0.30
+2.30
+Toy example: one position, an untrained model.
+
+L = − ln pθ (sat ∣ The cat) = − ln 0.10 ≈ 2.30
+​
+
+Training requires prediction targets from data.
+Guided tour · Cover a word
+
+Lecture 7 · Training task 07 / 85
+
+One Sentence, Three Pre-training Objectives
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+Same raw text. Different prediction questions.
+1 Original text
+The cat sat on the mat . Self-supervised: the targets come from the text itself.
+
+Causal Language Masked Language T5 Span Corruption
+Modeling (CLM) Modeling (MLM)
+2 Model input
+The cat The [MASK] sat on The <extra_id_0> on
+what is hidden?
+sat on the mat . the mat . the mat .
+
+3 Allowed context the past only both sides of the corrupted encoder: both sides
+what can it see? input decoder: past + cross-attention
+
+4 Prediction target
+sat cat cat sat
+what is predicted?
+one of many positions one selected position the whole span
+
+★ Papers Generative Pre-trained Transformer Bidirectional Encoder Representations Text-to-Text Transfer Transformer (T5)
+(GPT) · Radford et al., 2018 from Transformers (BERT) · Devlin et · Raffel et al., 2020
+al., 2019
+
+Lecture 7 · Training task 08 / 85
+
+Causal Language Modeling (CLM)
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+Predict the next token using only the preceding tokens.
+1 Original text The cat sat on the mat .
+raw sentence
+
+2 Model input The cat sat on the mat .
+true prefix
+
+3 Allowed context reads reads hidden hidden hidden hidden hidden
+reads the past only
+
+4 Prediction target sat pθ(sat | The cat)
+what must be predicted
+
+5 Supervised loss loss loss loss loss loss loss
+positions: every next
+token (+ <EOS>) Every position is trained; this page follows one of them (cat → sat).
+
+Representative model: Generative Pre-trained Transformer (GPT), Radford et al., 2018, “Improving Language Understanding by
+Generative Pre-Training.” GPT is a representative model, not the origin of autoregressive language modeling.
+
+Lecture 7 · Training task 1 Causal LM 2 Masked LM 3 T5 Span Corruption 09 / 85
+
+Shift Once: Build Inputs and Targets
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+One sentence gives us multiple prediction targets.
+Input <BOS> The cat sat on the mat .
+
+position t 1 2 3 4 5 6 7 8
+
+Target The cat sat on the mat . <EOS>
+
+Each input position is aligned with the next token: at t = 3 the input is cat and the target is sat.
+
+Lt = − ln pθ (xt ∣ x<t ),
+​ ​ ​ ​ pθ (x3 = sat ∣ x<3 = ⟨BOS⟩ The cat)
+​ ​ ​
+
+x₀ = ⟨BOS⟩ and x₈ = ⟨EOS⟩ are implementation conventions; the example uses one token per word or mark.
+
+Lecture 7 · Training task 1 Causal LM 2 Masked LM 3 T5 Span Corruption 10 / 85
+
+Teacher Forcing: True Prefix vs Generated Prefix
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+Training uses the true previous tokens. Inference uses generated previous tokens.
+Training · Teacher forcing Inference · Autoregressive generation
+Context model output Context model output
+
+The cat LLM slept The cat LLM slept
+ignored as context
+true next token (data)
+
+sat
+Next context Next context
+
+The cat sat The cat slept
+true token generated token
+
+Teacher Forcing (using ground-truth previous tokens as autoregressive training inputs) is a
+training strategy, not a fourth objective.
+
+Lecture 7 · Training task 1 Causal LM 2 Masked LM 3 T5 Span Corruption 11 / 85
+
+Causal Mask: Training Without Looking Ahead
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+The full sequence is provided, but each position can attend only to its past and itself.
+keys (read)
+queries ↓ >
+OS he at at n Query = cat: which positions may it read?
+B e at
+< T c s o th m .
+<BOS>
+may read
+query
+The <BOS> The cat
+cat
+cat
+sat cannot read (the future)
+✕
+on sat on the mat .
+the
+mat
+. may attend masked (future)
+
+Teacher forcing supplies the true tokens; the causal mask decides what each query may read.
+Guided tour · Causal mask
+
+Lecture 7 · Training task 1 Causal LM 2 Masked LM 3 T5 Span Corruption 12 / 85
+
+Label Leakage: When the Model Sees the Answer
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+Same input. Same target. Only the visibility rule changed.
+keys (read)
+queries ↓ >
+OS he at at n Query = cat: which positions may it read?
+B e at
+< T c s o th m .
+<BOS>
+may read
+query
+The <BOS> The cat
+cat !
+cat
+sat cannot read (the future)
+✕
+on sat on the mat .
+the
+mat the answer is readable: leak
+. may attend masked (future) leak
+
+At cat the model can now read sat, its own target: it can simply copy the answer.
+
+Low training loss does not guarantee meaningful learning if the answer leaks into the input.
+
+Lecture 7 · Training task 1 Causal LM 2 Masked LM 3 T5 Span Corruption 13 / 85
+
+From Hidden States to Token Probabilities
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+Each context produces a probability distribution over the vocabulary.
+Context Hidden state LM head Logits z Probabilities p
+
+sat: 1.61 sat 0.50
+softmax
+The cat hcat LM head slept: 1.10 slept 0.30
+at the position of “cat” ran: 0.69 ran 0.20
+
+Toy vocabulary of three words.
+
+ezi ​
+
+pi =
+∑j e z j
+​ ​
+
+​
+
+​
+
+Toy construction: the logits are z = ln p + 2.3, so the softmax gives 0.50, 0.30 and 0.20 after rounding. Real logits
+are arbitrary real numbers.
+
+Lecture 7 · Training task 1 Causal LM 2 Masked LM 3 T5 Span Corruption 14 / 85
+
+Score the Probability of the True Token
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+We score the observed target, regardless of what the model would sample.
+Context Hidden state LM head Logits z Probabilities p
+observed target
+
+sat: 1.61 sat 0.50
+softmax
+The cat hcat LM head slept: 1.10 slept 0.30
+at the position of “cat” ran: 0.69 ran 0.20
+
+Same toy distribution as the previous page.
+
+pθ (sat ∣ The cat) = 0.50
+​
+
+Sampling could return slept (probability 0.30). Training does not sample: it reads the probability of the observed
+token.
+
+Lecture 7 · Training task 1 Causal LM 2 Masked LM 3 T5 Span Corruption 15 / 85
+
+Negative Log-Likelihood: Probability to Loss
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+L = − ln pθ (y ∣ c)
+​
+
+p(correct) p = 0.5 p = 0.1
+
+Probability distribution −ln p
+
+sat (true)
+slept
+ran
+p
+p = 0.50 −ln p = 0.693 Probabilities sum to 1.00
+
+Lower probability of the true token means higher loss. Natural logarithm; p = 0.1 is the untrained model of the
+first page of this chapter, p = 0.5 the toy distribution just scored.
+
+Lecture 7 · Training task 1 Causal LM 2 Masked LM 3 T5 Span Corruption 16 / 85
+
+Causal Language Modeling Loss
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+Train on every valid next-token prediction.
+Input <BOS> The cat sat on the mat .
+
+Targets The cat sat on the mat . <EOS>
+
+p(target) 0.80 0.10 0.50 0.90 0.80 0.70 0.60 0.90
+
+−ln p 0.223 2.303 0.693 0.105 0.223 0.357 0.511 0.105
+
+1 4.520
+LCLM = − ∑ ln pθ (xt ∣ x<t ) = ≈ 0.565
+∣S∣ 8
+​ ​ ​ ​ ​ ​ ​
+
+t∈S
+
+All 8 targets shown are valid. PAD or ignored labels get mask 0 and leave the denominator.
+
+Lecture 7 · Training task 1 Causal LM 2 Masked LM 3 T5 Span Corruption 17 / 85
+
+Masked Language Modeling (MLM)
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+Predict the original selected tokens from a corrupted sentence.
+1 Original text The cat sat on the mat .
+raw sentence
+
+2 Model input The [MASK] sat on the mat .
+corrupted sentence
+
+3 Allowed context reads reads reads reads reads reads reads
+reads both sides
+
+4 Prediction target cat pθ(cat | corrupted input)
+what must be predicted
+
+5 Supervised — loss — — — — —
+only selected
+positions One selected position shown. Standard BERT selects about 15% of the positions.
+
+Representative model: Bidirectional Encoder Representations from Transformers (BERT), Devlin et al., 2019, “BERT: Pre-training of
+Deep Bidirectional Transformers for Language Understanding.”
+
+Lecture 7 · Training task 1 Causal LM 2 Masked LM 3 T5 Span Corruption 18 / 85
+
+Selected Does Not Always Mean Masked
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+Supervised does not necessarily mean hidden.
+Standard BERT selects about 15% of the positions; each one is changed in one of three ways:
+
+80% [MASK] 10% 10%
+replaced by [MASK] random kept
+
+Masked Randomly replaced Unchanged
+Original cat Original the Original mat
+
+Input [MASK] Input a Input mat
+Target cat Target the Target mat
+In loss ✓ yes In loss ✓ yes In loss ✓ yes
+
+All three count in the loss; the target is always the original token.
+
+Toy example: three selected positions illustrate the three cases; it is not a real 80/10/10 sample.
+
+Lecture 7 · Training task 1 Causal LM 2 Masked LM 3 T5 Span Corruption 19 / 85
+
+Masked LM Uses Bidirectional Context
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+Use both sides of the corrupted input to recover selected tokens.
+Masked LM The [MASK] sat on a mat .
+model input
+allowed context reads reads reads reads reads reads reads
+
+left context right context (corrupted input)
+
+cat
+
+Causal LM The cat sat on the mat .
+model input
+allowed context reads reads hidden hidden hidden hidden hidden
+
+The right side is the corrupted input (“a mat .”), not the original sentence. A selected-but-unchanged token such
+as “mat” stays visible: that is part of BERT’s design, not CLM-style label leakage.
+Guided tour · Masked LM
+
+Lecture 7 · Training task 1 Causal LM 2 Masked LM 3 T5 Span Corruption 20 / 85
+
+Masked Language Modeling Loss
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+Only selected positions contribute to the loss.
+Input x̃ The [MASK] sat on a mat .
+
+Original x The cat sat on the mat .
+
+Selected — ✓ — — ✓ ✓ —
+
+p(original) — .50 — — .25 .80 —
+
+−ln p — .693 — — 1.386 .223 —
+
+1
+LMLM = − ∑ ln pθ (xt ∣ x)
+∣S∣
+​ ​ ​ ​ ​
+
+t∈S
+
+Mean = (0.693 + 1.386 + 0.223) / 3 ≈ 0.768. The unchanged “mat” still contributes.
+
+Lecture 7 · Training task 1 Causal LM 2 Masked LM 3 T5 Span Corruption 21 / 85
+
+T5 Span Corruption: Reconstruct Missing Spans
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+Remove a text span and reconstruct the missing sequence.
+1 Original text The cat sat on the mat .
+raw sentence
+
+2 Model input The <extra_id_0> on the mat .
+corrupted input
+
+3 Allowed context reads reads reads reads reads reads
+encoder: both sides
+decoder: past + cross
+
+4 Prediction target cat sat the removed span, rebuilt by the decoder
+missing span
+
+5 Supervised — loss loss — — — —
+decoder target
+positions The decoder also predicts the sentinels and <EOS>; the full target sequence is on the next slides.
+
+Representative model: Text-to-Text Transfer Transformer (T5), Raffel et al., 2020, “Exploring the Limits of Transfer Learning with a
+Unified Text-to-Text Transformer.”
+Guided tour · T5 span
+
+Lecture 7 · Training task 1 Causal LM 2 Masked LM 3 T5 Span Corruption 22 / 85
+
+T5: Encoder–Decoder Information Flow
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+The decoder uses both the corrupted input and its previous target tokens.
+Encoder Decoder
+bidirectional self-attention causal self-attention + cross-attention
+cross-attention
+h h h h h h h h h h
+
+every position reads every position each position reads only the past
+
+The <extra_id_0> on the mat . <START> <extra_id_0> cat sat
+previous target tokens
+
+CLM · causal context MLM · bidirectional input T5 · bidirectional encoder + causal
+decoder + cross-attention
+
+Lecture 7 · Training task 1 Causal LM 2 Masked LM 3 T5 Span Corruption 23 / 85
+
+T5 Decoder: Teacher Forcing and Sequence Loss
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+T5 also uses teacher forcing, but in the decoder.
+Encoder input The <extra_id_0> on the mat .
+Decoder
+<START> <extra_id_0> cat sat <extra_id_1>
+input
+
+Targets <extra_id_0> cat sat <extra_id_1> <EOS>
+
+p(target) 0.80 0.50 0.25 0.60 0.90
+
+−ln p 0.223 0.693 1.386 0.511 0.105
+
+M
+1 2.919
+LT5 = − ∑ ln pθ (yj ∣ x, y<j ) = ≈ 0.584
+5
+​ ​ ​ ​ ​ ​ ​
+
+M j=1
+
+The decoder input is the right-shifted target (causal self-attention, plus cross-attention to the encoder). <START>
+is a teaching placeholder; T5 implementations typically start with the padding token. T5 §§3.2.1, 3.3.2.
+Lecture 7 · Training task 1 Causal LM 2 Masked LM 3 T5 Span Corruption 24 / 85
+
+Same Text, Three Prediction Questions
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+Guided tour · Three objectives
+Same raw text. Different information and targets.
+Causal Language Masked Language T5 Span Corruption (Text-to-
+Modeling (CLM) Modeling (MLM) Text Transfer Transformer)
+
+1 Original text The cat sat on the mat .
+
+2 Model input <BOS> The cat sat on The [MASK] sat on a The <extra_id_0> on the
+the mat . mat . mat .
+
+3 Allowed the past only (causal mask) both sides of the corrupted input encoder: both sides
+context decoder: past targets + cross-
+attention
+
+4 Prediction The cat sat on the mat cat the mat <extra_id_0> cat sat
+target
+. <EOS> <extra_id_1> <EOS>
+
+5 Supervised every next-token position the selected positions only every decoder target position
+positions
+
+Lecture 7 · Training task 1 Causal LM 2 Masked LM 3 T5 Span Corruption 25 / 85
+
+Three Objectives, One Training Principle
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+Different prediction questions. The same likelihood-based learning principle.
+1
+L(θ) = − ∑ ln pθ (yi ∣ ci )
+∣S∣
+​ ​ ​ ​ ​
+
+i∈S
+
+ci allowed context · yi observed target · S supervised prediction positions
+
+Causal LM Masked LM T5 Span Corruption
+<BOS> The cat The [MASK] corrupted encoder input +
+ci ci
+ci previous decoder targets
+(true prefix) sat on a mat .
+yi cat next decoder target
+yi sat next token
+yi cat original token S decoder target positions
+S every next-token position
+selected positions: cat, the,
+S
+mat
+
+Different objective losses are not directly comparable solely from their numerical values.
+
+Lecture 7 · Training task 1 Causal LM 2 Masked LM 3 T5 Span Corruption 26 / 85
+
+Your Turn: Construct the Training Question
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+Specify the context, the target, and the supervised positions.
+
+CLM MLM T5 Span Corruption
+Given “The cat” in the original If “mat” is selected but If “cat sat” is removed as one
+sentence, what is the next- unchanged, does it span, what is the decoder
+token target? contribute to the training target sequence?
+Why is “sat” unavailable as loss?
+current context? Why?
+
+Pair work · 60 seconds. Add one sentence explaining each answer.
+
+Follow-up: which two methods use teacher forcing in an autoregressive decoder?
+
+Lecture 7 · Training task 27 / 85
+
+Our Decision: Causal LM for Decoder-only LLMs
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+Inference predicts and generates tokens. CLM training scores observed next tokens.
+prefix generate a token
+Inference sat 0.50
+generates tokens The cat LLM slept 0.30
+slept
+ran 0.20
+true prefix score the target
+Training (CLM) sat 0.50 training loss
+scores the target The cat LLM slept 0.30
+sat −ln 0.50 = 0.69
+ran 0.20
+
+L(θ) ⟶ ∇θ L(θ) ⟶ θupdated
+​ ​
+
+Next decision: how do we use the loss to update the weights?
+
+Lecture 7 · Training task 28 / 85
+
+Decision 2: From Errors to Weight Updates
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+We know what to predict. How do prediction errors become better weights?
+① Build a valid batch — and score it ② Decide how the weights move
+pθ ​
+LB ​
+gt ​
+Δθt ​
+θt ​
+
+Batch preparation Forward pass Loss Backpropagation Optimizer Updated weights
+inputs, labels, masks predictions one number a gradient per weight chooses the step for the next pass
+
+the updated weights serve the next forward pass, on a new batch
+
+A training objective tells us what to learn. A training step determines how the weights change.
+
+Lecture 7 · Update rule A Batch B Why Adam? C Adam D AdamW E Training loop 29 / 85
+
+From Training Objective to Training Examples
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+Given a sequence of tokens, what exactly should the model predict?
+Document A
+1 2 3 4
+
+<BOS> The cat sat <EOS>
+
+One document → 4 training examples predicts
+
+1
+
+2
+reads
+
+reads
+<BOS>
+
+<BOS> The
+The
+
+cat
+4
+next-token predictions
+3 reads <BOS> The cat sat from a 5-token document
+
+4 reads <BOS> The cat sat <EOS> n tokens → n − 1 targets
+
+Different training objectives require different input–target constructions. We use Causal Language Modeling (CLM) here. <BOS>
+and <EOS> are illustrative special tokens; real tokenizers and models differ.
+→ To train all these predictions together, we need to align inputs and labels.
+
+Lecture 7 · Update rule A Batch B Why Adam? C Adam D AdamW E Training loop 30 / 85
+
+Input–Label Shifting: Who Predicts Whom?
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+How do we align every input position with its correct target?
+labels = tokens 2 … 5
+Teacher forcing
+Document A <BOS> The cat sat <EOS> The inputs are the ground-truth tokens,
+never the model’s own samples.
+inputs = tokens 1 … 4 One forward pass
+All 4 positions are predicted in parallel.
+Inputs <BOS> The cat sat Shifting is not masking
+The shift only pairs inputs with labels. A
+t=1 t=2 t=3 t=4
+causal mask must still hide the future.
+Many libraries shift inside the loss function.
+Labels The cat sat <EOS> Shift once.
+One column = one prediction (t = 3: cat → sat).
+
+Teacher forcing supplies ground-truth context. Causal masking hides the future.
+
+Lecture 7 · Update rule A Batch B Why Adam? C Adam D AdamW E Training loop 31 / 85
+
+Two Masks, Two Different Jobs
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+Which tokens can the model read, and which predictions count toward the loss?
+What can be read? What is scored?
+Causal attention mask Loss mask
+O S> e O S>
+t t
+<B Th ca sa <E
+
+<BOS> may read position <BOS> The cat sat <EOS>
+(itself + the past)
+The
+hidden
+target The cat sat <EOS> none
+(the future)
+cat
+
+row: the position
+sat that is reading mask s 1 1 1 1 0
+column: the token
+<EOS> 4 scored predictions · 1 ignored: nothing follows <EOS> here
+being read
+
+Attention masks control information flow. Loss masks control supervision.
+
+Lecture 7 · Update rule A Batch B Why Adam? C Adam D AdamW E Training loop 32 / 85
+
+Padding: Equal Length, Unequal Information
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+Real documents rarely have the same length. How do we put them in one batch?
+slot 1 2 3 4 5 6 7 8
+
+Doc A <BOS> The cat sat <EOS> PAD PAD PAD
+5 tokens
+loss mask s 1 1 1 1 0 0 0 0
+
+Doc B <BOS> Hello <EOS> PAD PAD PAD PAD PAD
+3 tokens
+loss mask s 1 1 0 0 0 0 0 0
+
+16 slots allocated
+2 rows × length 8 8 document tokens
+only 50% of the slots 6 scored predictions
+PAD and the last token: s = 0
+
+Attention: real tokens must not read PAD. What the PAD positions themselves compute varies by implementation; their outputs are
+ignored either way.
+
+Padding buys one rectangular tensor — and pays for it with empty slots.
+
+Lecture 7 · Update rule A Batch B Why Adam? C Adam D AdamW E Training loop 33 / 85
+
+Packing: Better Utilization of Context
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+Instead of padding two short documents, can we place them in the same sequence?
+Padding Packing
+Doc A Doc B
+<BOS> The cat sat <EOS> PAD PAD PAD pack
+<BOS> The cat sat <EOS> <BOS> Hello <EOS>
+<BOS> Hello <EOS> PAD PAD PAD PAD PAD
+
+8 document tokens in 16 slots · 50% 8 document tokens in 8 slots · 100%
+
+Same row, two documents: may Doc B read Doc A? It depends on the training setup.
+Independent documents Continuous token stream
+A
+Block-diagonal causal mask: A
+Plain causal mask:
+each document reads only itself. Doc B may also read Doc A.
+<EOS> → <BOS> is not scored. <EOS> → <BOS> may be scored.
+B 6 scored predictions B up to 7 scored predictions
+
+Packing fills the slots — and makes the boundary rule an explicit choice.
+
+Lecture 7 · Update rule A Batch B Why Adam? C Adam D AdamW E Training loop 34 / 85
+
+From a Training Batch to One Loss
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+How do we combine the predictions of a batch into one training loss?
+Recall · token IDs → Transformer → LM head → logits → softmax → p(target) → −ln p
+Seq A <BOS> The cat sat <EOS> PAD PAD PAD
+p(The) = .50 p(cat) = .40 p(sat) = .10 p(<EOS>) = .80
+−ln p(target) s=0 s=0 s=0 s=0
+0.693 0.916 2.303 0.223
+
+Seq B <BOS> Hello <EOS> PAD PAD PAD PAD PAD
+p(Hello) = .90 p(<EOS>) = .70
+−ln p(target) s=0 s=0 s=0 s=0 s=0 s=0
+0.105 0.357
+
+∑b,t sb,t [− ln pb,t (yb,t )] 4.135 + 0.462
+LB =
+​ ​ ​ ​
+
+LB = ≈ 0.766
+4+2
+​ ​
+
+∑b,t sb,t
+​ ​
+
+​ ​
+
+s = 1 scored, s = 0 ignored. The denominator is the 6 valid targets, not the 16 slots: a token-weighted mean. (Mean of the two
+sequence means: 0.632.)
+→ Backpropagation will give us gradients — but a gradient does not say how far each parameter should move.
+
+Lecture 7 · Update rule A Batch B Why Adam? C Adam D AdamW E Training loop 35 / 85
+
+One Batch, One Gradient, One Update
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+Once we have a loss, what does backpropagation give us — and who decides the step?
+Batch preparation Forward pass Loss Backpropagation Optimizer Updated weights
+
+gt = ∇θ LBt (θt−1 )
+​ ​
+
+​
+​ θt = θt−1 − ηt gt
+​ ​ ​ ​
+
+Backpropagation computes the gradient. The optimizer picks the increment; η sets its scale.
+loss Learning rate η
+Stochastic Gradient Descent (SGD):
+the hiker feels only the local slope.
+slope g
+η = 0.10
+g = 2.00
+θ θ⁺ = 1.80
+−3 0 3
+L(θ⁺) = 1.620
+→ Should every parameter always follow its current gradient, with the same global learning rate?
+
+Lecture 7 · Update rule A Batch B Why Adam? C Adam D AdamW E Training loop 36 / 85
+
+Momentum Solves One Problem. What Remains?
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+We already have Momentum. Why do we need another optimizer?
+① Unstable direction ✓ addressed by Momentum ② Unequal gradient scales still open →
+
+SGD: follows every noisy gradient
+Coordinate A
+gradients ≈ ±10
+
+minimum
+Coordinate B same axis
+gradients ≈ ±0.1
+Momentum: follows the running average
+One global η: the step of A is about 100× the step of B.
+Toy simulation: the same noisy gradients for both (η = 0.35, β = 0.8). This alone does not prove SGD fails — it motivates adaptive scaling.
+
+Can one optimizer remember directions and adapt to scales?
+
+Guided tour · Momentum
+
+Lecture 7 · Update rule A Batch B Why Adam? C Adam D AdamW E Training loop 37 / 85
+
+Who Is Adam?
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+We trained the model using Adam. Who is Adam?
+Researcher Reviewer
+A long-running joke in the machine-learning community. This dialogue is fictional.
+
+Adam = Adaptive Moment Estimation
+An optimization algorithm — not a PhD student who trained everyone’s models.
+
+Memory 1 · Direction
+SGD sees the current slope
+First moment m: a running average
+of the signed gradients
+Momentum + remembers directions
+Memory 2 · Scale
+Adam + remembers the scale
+Second moment v: a running average
+of the squared gradients
+
+Adam has two memories: one for the direction of recent gradients, one for their scale.
+Kingma & Ba, Adam: A Method for Stochastic Optimization (arXiv 2014; ICLR 2015).
+
+Lecture 7 · Update rule A Batch B Why Adam? C Adam D AdamW E Training loop 38 / 85
+
+First Moment: Remember the Direction
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+Why shouldn’t we trust every new gradient on its own?
+History A · the gradients agree History B · the gradients conflict
++2 +2 +2 +2 mean +2 +2 −2 +2 −2 mean 0
+
+An ordinary mean, for intuition: gradients that agree add up, gradients that conflict cancel.
+keep 90% · × β1 ​
+
+previous memory mt−1 ​
+
++ updated memory mt ​
+
+new gradient gt
+add 10% · × (1 − β1 )
+​
+
+​
+
+mt = β1 mt−1 + (1 − β1 ) gt
+​ ​ ​ ​ ​
+
+An Exponential Moving Average (EMA). mt keeps the sign and the size of recent gradients; β1 sets how much history is kept. It is
+​ ​
+
+the idea behind Momentum, whose coefficient conventions differ between implementations.
+
+First moment: a running average of signed gradients.
+
+Lecture 7 · Update rule A Batch B Why Adam? C Adam D AdamW E Training loop 39 / 85
+
+Second Moment: Why Square the Gradient?
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+Can the mean gradient tell us how large gradients typically are?
+Signed gradients g Squared gradients g²
++10 +10 100 100 100 100
+
+square each value √100 = 10
+the typical
+(+10)² = (−10)² = 100 magnitude
+
+−10 −10
+mean gradient = 0 mean squared gradient = 100
+the signs cancel nothing cancels
+
+Mean gradient E[g] Second raw moment E[g 2 ] Variance E[g 2 ] − (E[g])2
+signed: values can cancel never negative: nothing cancels for [12, 8, 12, 8]: 104 − 102 = 4
+
+Squaring removes the sign, so magnitudes can no longer cancel.
+
+Lecture 7 · Update rule A Batch B Why Adam? C Adam D AdamW E Training loop 40 / 85
+
+Second Moment: Remember the Scale
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+How can each parameter keep track of its own recent gradient scale?
+
+First moment signed gradient gt ​ EMA with β1 ​ direction memory mt ​
+
+square it same machine, new input
+
+Second moment squared gradient gt2 ​ EMA with β2 ​ scale memory vt ​
+
+Coordinate A gradients around ±10 v ≈ 100 10,000× apart:
+Coordinate B gradients around ±0.1 v ≈ 0.01 one v for every coordinate
+
+vt = β2 vt−1 + (1 − β2 ) gt2
+​ ​ ​ ​ ​
+
+The square is taken coordinate by coordinate, so vt has one entry per parameter. β2 sets how slowly the squared-gradient history
+​ ​
+
+fades (0.99 in our worked example; Kingma & Ba suggest 0.999).
+
+Second moment: a running average of squared gradients — one per coordinate.
+
+Lecture 7 · Update rule A Batch B Why Adam? C Adam D AdamW E Training loop 41 / 85
+
+Adaptive Updates: A Step for Each Coordinate
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+Why divide by the square root of the second moment?
+Gradient g SGD step −η g Adam step −η m
+^ / v^ ​
+
+−1.0
+Coordinate A +10 −0.1
+
+Coordinate B +0.1 −0.01 −0.1
+
+100× apart still 100× apart equal steps
+
+v^t ≈ Root Mean Square (RMS) of g m^t
+dt =
+​
+
+​ ​
+
+v^t + ϵ
+​ ​
+
+​ ​
+
+The square root returns to the units of g. First step shown (η = 0.1, ε negligible); later steps are generally not equal.
+
+Adam adapts each coordinate’s step to its own recent gradient
+statistics. Guided tour · Adaptive stride
+
+Lecture 7 · Update rule A Batch B Why Adam? C Adam D AdamW E Training loop 42 / 85
+
+Two Memories Work Better Together
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+Why do we need both the first and the second moment?
+Consistent history Oscillating history
++2 +2 +2 +2 +2 −2 +2 −2
+
+signed mean RMS mean / RMS signed mean RMS mean / RMS
+2 ÷ 2 = 1 0 ÷ 2 = 0
+a full-size step almost no step
+
+^t
+first moment m ​
+
+÷ RMS scale v^t ​ ​
+
+= direction dt
+what gradients tend to say how loudly they tend to say it
+​
+
+Equal-weight intuition, not an Adam simulation: real Adam keeps two exponential moving averages (β₁ and β₂ may differ) and
+applies bias correction.
+
+The first moment tells Adam what gradients tend to say. The second tells Adam how loudly they
+tend to say it.
+
+Lecture 7 · Update rule A Batch B Why Adam? C Adam D AdamW E Training loop 43 / 85
+
+Bias Correction: A Memory That Starts Empty
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+Both memories start at zero: m0 = v0 = 0. What does the first step look like?​ ​
+
+raw m1 = (1 − β1 ) g1 = 0.2
+​ ​ ​ ^ 1 = 2.0
+corrected m ​
+How full is each memory?
+weight on the gradients seen so far
+First moment 1
+only 10% of g₁ = 2 ÷ 0.1 matches g₁ = 2 1 − β1t ​
+
+raw v1 = (1 − β2 ) g12 = 0.04
+​ ​ ​ ^1 = 4.0
+corrected v ​
+1 − β2t ​
+
+Second moment
+only 1% of g₁² = 4 ÷ 0.01 matches g₁² = 4 0
+0 100 200 300
+Example: g₁ = 2, β₁ = 0.9, β₂ = 0.99. training step t
+
+mt vt
+^t =
+m v^t =
+​ ​
+
+1 − β1t 1 − β2t
+​ ​ ​ ​
+
+​ ​
+
+Early weights sum to 1 − βᵗ, not 1. The correction undoes this start-up effect; it is not exact when gradients keep changing.
+
+An empty memory under-counts. Dividing by 1 − βᵗ repairs the early steps.
+
+Lecture 7 · Update rule A Batch B Why Adam? C Adam D AdamW E Training loop 44 / 85
+
+Adam: Putting Everything Together
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+Step t 1 2 3 g = [2, −1, 2] · β₁ = 0.9 · β₂ = 0.99 · η = 0.1 · ε = 10⁻⁸ Guided tour · Adam step by step
+
+mt
+^t =
+​
+
+mt = β1 mt−1 + (1 − β1 ) gt
+​ ​ ​ ​ ​
+m
+1 − β1t
+​ ​
+
+0.200000
+​
+
+2.000000
+m^t
+dt = Δθt = −ηt dt
+​
+
+gt
+v^t + ϵ
+​ ​
+​ ​ ​ ​
+
+2.000 -0.100000
+​ ​
+
+1.000000
+= ∇θ LBt (θt−1 ) vt
+vt = β2 vt−1 + (1 − β2 ) gt2 v^t =
+​
+
+​ ​ ​
+
+1 − β2t
+​
+
+θt = θt−1 + Δθt
+​
+
+​ ​ ​ ​
+
+0.040000
+​ ​ ​
+
+4.000000
+
+t gt ​ mt ​ vt ​ ^t
+m ​ v^t ​ dt ​ Δθt
+1 2 0.200 0.040000 2.0000 4.0000 1.0000 −0.1000
+2 −1 0.080 0.049600 0.4211 2.4925 0.2667 −0.0267
+3 2 0.272 0.089104 1.0037 3.0000 0.5795 −0.0579
+
+Step 2: the gradient turns negative (g2 = −1), yet the memory is still positive (m2 = 0.08). ​ ​
+
+History keeps the update going the same way, only smaller.
+Lecture 7 · Update rule A Batch B Why Adam? C Adam D AdamW E Training loop 45 / 85
+
+Adam Remembers, So Adam Needs Memory
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+What must the optimizer store between training steps?
+Weights θ First moment m Second moment v
+
++ +
+P values P values P values
+
+Adam’s state: 2P extra values
+
+weights θ gradients g first moment m second moment v activations … (varies)
+
+Training memory, not to scale. Example: P = 1 billion parameters in 32-bit floats → about 4 GB for each P-sized block.
+The exact footprint depends on precision and implementation. Checkpoints keep m and v to resume training; inference needs only
+θ.
+
+Adaptivity has a price: two extra values per parameter.
+
+Lecture 7 · Update rule A Batch B Why Adam? C Adam D AdamW E Training loop 46 / 85
+
+Weight Decay: Why Shrink Weights?
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+Besides reducing prediction error, why might we want to shrink the weights?
+① Improve predictions ② Control weight size
+follow the gradient of the data loss regularize: pull every weight toward zero
+
+gradient step −ηt gt (follows the data)
+​ ​
+
+(always toward 0) shrink −ηt λ θt−1
+​
+
+0 θt−1 ​ θt ​
+
+λ θt = (1 − ηt λ) θt−1 − ηt gt
+Lreg = L + ∥θ∥22 ​ ​ ​ ​ ​ ​ ​ ​
+
+2
+​ ​
+
+shrink gradient step
+
+Here gt is the gradient of the data loss alone. The shrink form holds for vanilla SGD; it does not carry over unchanged to Adam.
+​
+
+→ In vanilla SGD both effects can travel through one gradient. What happens inside Adam?
+
+Lecture 7 · Update rule A Batch B Why Adam? C Adam D AdamW E Training loop 47 / 85
+
+The Problem: L2 Gets Mixed into Adam
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+What changes when the regularization gradient enters Adam’s moments?
+First moment mt ​
+
+m^t
+dt =
+​
+
+Data gradient gt ​
++ ​
+
+v^t + ϵ
+​ ​
+​
+
+adaptive direction
+Second moment vt
+Δθt
+​
+
+​
+
+one increment
+
+Weights θt−1 λ θt−1 ​
+
+no separate path Loshchilov & Hutter
+L2 gradient
+​
+
+2019, §2
+Shrink per step A · gradient RMS ≈ 10 ≈ 0.0001 100× apart: set by gradient history
+for a weight θ = 1
+B · gradient RMS ≈ 0.1 ≈ 0.01 noisy gradients: about ηλθ / RMS(g)
+(η = 0.1, λ = 0.01)
+
+gtcoupled = gt + λ θt−1
+​ ​ ​ mt and vt both average gtcoupled
+​ ​ ​
+
+Inside Adam, the L2 term is no longer a separate, uniform shrinkage: gradient history decides
+how strongly each weight decays.
+Lecture 7 · Update rule A Batch B Why Adam? C Adam D AdamW E Training loop 48 / 85
+
+AdamW: Decouple Weight Decay
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+How can we separate optimization from weight decay?
+First moment mt ​
+
+m^t
+dt =
+​
+
+Data gradient gt ​
+​
+
+v^t + ϵ
+​ ​
+​
+
+adaptive direction
+Second moment vt
+Δθt
+​
+
+​
+
+one increment
+
+Weights θt−1 λ θt−1 ​
+
+Shrink −ηt λ θt−1 Loshchilov & Hutter
+decay term
+​ ​ ​
+
+ICLR 2019
+Shrink per step A · gradient RMS ≈ 10 0.001 The same: set only by η and λ
+for a weight θ = 1
+B · gradient RMS ≈ 0.1 0.001 exactly ηλθ, whatever the gradient history
+(η = 0.1, λ = 0.01)
+
+Δθt = −ηt dt − ηt λ θt−1
+​ ​ ​ ​ ​
+θ=1, d=1 : Δθ = −0.1 − 0.001 = −0.101 ⇒ θ+ = 0.899
+
+AdamW = Adam with decoupled weight decay: the moments see
+only the data gradient. Guided tour · AdamW decay
+
+Lecture 7 · Update rule A Batch B Why Adam? C Adam D AdamW E Training loop 49 / 85
+
+From One Update to a Trained LLM
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+How does one optimizer step become a complete training process?
+next batch — repeated for a very large number of steps
+
+Prepare batch Forward pass Loss Backpropagation AdamW Updated weights
+inputs, labels, masks predictions over valid targets gradient g moments + decay θ changes a little
+
+Monitor: is training working? Learning-rate schedule
+loss
+held-out loss: monitoring only, no gradients ηt the global scale of every update
+
+held-out
+training
+training steps warmup decay training steps
+Illustrative shapes: neither this schedule nor these loss curves are universal.
+
+Training is not a single update. It is a long sequence of carefully
+controlled updates.
+Guided tour · LR schedule
+
+Lecture 7 · Update rule A Batch B Why Adam? C Adam D AdamW E Training loop 50 / 85
+
+Break · What Should the Model Learn From?
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+We know how to update the weights. What data should the model
+repeatedly read?
+Before the break After the break
+
+✓ 1 · Training task ✓ 2 · Update rule 10 3 · Training data 4 · Compute budget
+minutes
+
+An optimizer can only learn from the examples we give it.
+
+During the break: think of one type of text you would include in pre-training — and one you
+would remove.
+
+Lecture 7 · Break 51 / 85
+
+Decision 3: Same Model, Different Experience
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+Why can two identical models learn different capabilities?
+
+Training data A Training signals
+clean · diverse · balanced Identical training setup who contributes to the gradient
+Model A
+= same architecture
+general code science θA ​
+
+= same initialization
+
+Training data B
+= same training objective
+≠
+= same optimizer Training signals
+noisy · duplicated · skewed
+= = = = = = = = = same token budget Model B
+= = = = = = ! ! one document, copied spam rest θB ​
+
+! ! ! !
+
+Different data → different training signals → different learned models.
+Conceptual illustration.
+
+Lecture 7 · Training data Data pipeline 1 2 3 4 5 6 7 52 / 85
+
+From Raw Data to Training Distribution
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+What exactly does data processing change?
+
+g(θ) = Ex∼ptrain [∇θ L(θ; x)]
+​
+​ ​
+
+Parameters θ Training loss L Training distribution ptrain
+​
+
+updated by the optimizer · Decision 2 what to predict · Decision 1 which examples, how often · this chapter
+
+1 Sources & 2 3 Quality 4 Augmentation 5 Mixture & 6 Sampling &
+Deduplication
+cleaning filtering & synthesis diversity exposure
+
+Training distribution Evaluation
+Batches Loss Gradients Updated weights 7
+ptrain ​
+& feedback
+
+A teaching order: real pipelines reorder and repeat stages.
+
+Same model, same optimizer: changing ptrain changes the learning signal.
+​
+
+Lecture 7 · Training data Data pipeline 1 2 3 4 5 6 7 53 / 85
+
+Where Does LLM Training Data Come From?
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+Where does the text come from — and what is checked before it is admitted?
+
+Web pages strip templates, ads, menus
+Admission checks
+
+Books & reference works repair layout and OCR errors Provenance
+where is it from?
+
+Code keep formatting · pick file types Licence Raw corpus
+may we train on it? not yet training data
+
+∑ Scientific & technical papers parse PDF and LaTeX · keep formulas
+Sensitive data
+personal or private?
+Domain-specific data remove personal identifiers
+
+Sources bound what the model can see; each needs its own processing rules.
+Further reading: C4 · Dolma · FineWeb
+
+Lecture 7 · Training data 1 Sources & cleaning 2 3 4 5 6 7 54 / 85
+
+A Webpage Is Not a Training Document
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+What separates text extraction from text cleaning?
+Raw webpage (HTML) Extracted text Training document
+How plants make food How plants make food
+Home · News · Shop · Login Share Tweet Print Plants use sunlight, water
+We use cookies. Accept all? Plants use sunlight, water and and carbon dioxide to make
+
+How plants make food ① Extract carbon dioxide to make glucose
+and oxygen.
+② Clean glucose and oxygen. This
+process is called
+Plants use sunlight, water and
+HTML → Read more: 10 garden tricks › remove and photosynthesis. That is why
+carbon dioxide to make glucose
+and oxygen. … main text This process is called repair it’s vital for life on Earth.
+photosynthesis. That is why
+AD · 50% off garden tools itâ€™s vital for life on Earth.
+
+residue: links, broken characters
+About · Contact · © 2024 · Follow us
+
+Extraction finds the main content. Cleaning repairs what extraction leaves behind.
+
+Lecture 7 · Training data 1 Sources & cleaning 2 3 4 5 6 7 55 / 85
+
+Cleaning Is a Trade-off, Not a Perfect Rule
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+What happens when one simple rule is applied to every document?
+Rule Remove text that does not look like normal prose.
+
+A · Clean web B · Spam C · Code D · Science
+
+The city opened a new BEST PRICE!!! BUY NOW def mean(xs): F=m·a
+library on Monday. It click here click here n = len(xs) E = ½ m v²
+holds 40,000 books. best price best price return sum(xs) / n p₁ + p₂ + p₃ = 1
+
+Decision: Keep Decision: Remove Decision: Remove Decision: Remove
+
+useful code lost useful math lost
+
+Real case: C4’s “lines must end in punctuation” rule would remove ~30% of FineWeb’s tokens.
+
+Removing more is not automatically better: every rule needs validation.
+Sources: FineWeb, §3.5 · Dodge et al., Documenting C4.
+
+Lecture 7 · Training data 1 Sources & cleaning 2 3 4 5 6 7 56 / 85
+
+Duplicate Data Changes Sampling Probability
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+If a document is stored many times, how often does the model see it?
+10 stored records 2 distinct records
+A: 8 copies · B: 2 copies
+
+A A
+copy A
+copy A
+copy A
+copy
+clean web clean web clean web clean web clean web exact dedup
+A B Assumes uniform
+clean web spam record sampling
+A
+copy A
+copy A
+copy B B
+copy
+one copy each
+clean web clean web clean web spam spam
+
+Sampling probability Sampling probability
+
+A 80% B 20% A 50% B 50%
+8 2
+P (A) = 10 = 0.8,
+​ P (B) = 10 = 0.2
+​ P (A) = P (B) = 12 = 0.5 ​
+
+Spam page B rises from 20% to 50%: dedup removes repetition, not low quality.
+
+Deduplication reweights documents: it changes ptrain . ​
+
+After dedup, models emit memorized text 10× less often (Lee et al., 2022).
+
+Lecture 7 · Training data 1 2 Deduplication 3 4 5 6 7 57 / 85
+
+Near-Duplicate Documents: Shingles and Jaccard
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+Two pages differ by one word. How do we measure how similar they are?
+
+Document X the cat sat on Each document = a set of shingles
+solid = in both sets · dashed = in one set only
+
+shingles of X shingles of Y
+2-word the cat cat sat sat on
+shingles
+the cat
+Document Y the cat sat near sat on sat near
+cat sat
+
+2-word the cat cat sat sat near |X ∩ Y| = 2
+shingles |X ∪ Y| = 4
+
+∣X ∩ Y ∣ 2
+J(X, Y ) = J(X, Y ) = = 0.5
+∣X ∪ Y ∣ 4
+​
+​
+
+With a threshold such as J ≥ 0.8 (a policy choice), X and Y are not near-duplicates.
+
+Lecture 7 · Training data 1 2 Deduplication 3 4 5 6 7 58 / 85
+
+MinHash: Estimating Similarity Efficiently
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+A million documents make 5 × 10¹¹ pairs. Can we estimate J cheaply?
+
+trial one random order of the 4 shingles → first in X first in Y same?
+Why it works
+Each shingle is equally likely to
+1 cat sat sat near the cat sat on cat sat cat sat come first. The firsts match only if
+2 cat sat sat near sat on the cat cat sat cat sat it is shared: 2 of 4.
+
+3 sat near sat on the cat cat sat sat on sat near
+4 cat sat sat near the cat sat on cat sat cat sat Matches 5/8
+5 the cat sat near cat sat sat on the cat the cat Estimate 0.625
+6 sat on cat sat the cat sat near sat on cat sat
+Exact J(X, Y) 0.500
+7 the cat sat near sat on cat sat the cat the cat m = 128: error ≈ 0.04
+8 sat on the cat cat sat sat near sat on the cat
+
+m
+P [hmin (X) = hmin (Y )] = J(X, Y ) 1
+J (X, Y ) = ∑ 1[hi (X) = hi (Y )]
+​ ​
+
+m
+​ ​ ​ ​
+
+i=1
+
+In practice, hash functions replace random orders; the m minima form a document’s signature.
+
+Lecture 7 · Training data 1 2 Deduplication 3 4 5 6 7 59 / 85
+
+Dedup at Scale: More Is Not Always Better
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+Deduplication on billions of pages: should we remove as much as possible?
+Deduplication at scale FineWeb: 96 Common Crawl snapshots
+After base filtering, before deduplication
+Shingles MinHash LSH buckets Verify Deduplicate
+36T tokens
+
+Dedup inside each snapshot
+Chance of becoming a candidate pair (FineWeb) 20T tokens matched RefinedWeb
+1 92%
+77%
+56%
+Dedup across all snapshots (global)
+4T tokens barely better than no dedup
+
+0 Old snapshots lost up to 90% — and the kept 10% was worse.
+0.4 0.6 0.8 1.0
+similarity of a document pair
+
+Aggressive deduplication can change what kind of text is left, not only how much.
+Source: Penedo et al., FineWeb (2024), §3.4.
+
+Lecture 7 · Training data 1 2 Deduplication 3 4 5 6 7 60 / 85
+
+Benchmark Contamination Is Not Deduplication
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+Our training corpus has no duplicates left. Is evaluation now safe?
+Training corpus Evaluation set
+deduplicated: every document once held-out benchmark
+
+Q: Which gas do plants absorb in photosynthesis? same content Q: Which gas do plants absorb in
+A: Carbon dioxide. photosynthesis?
+
+Repeated inside training? No. deduplication Shared with evaluation? Yes. decontamination
+
+Unique ≠ uncontaminated: a score may reflect exposure, not ability.
+Train–test overlap: over 4% of standard validation sets (Lee et al., 2022).
+
+Lecture 7 · Training data 1 2 Deduplication 3 4 5 6 7 61 / 85
+
+What Does High-Quality Data Actually Mean?
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+Is “high quality” a property of a document — or of a document and a goal?
+Target: a general-purpose model Target: a code model “Quality” can mean
+C code Linguistic quality
+Wikipedia article A
+relevance to the target →
+
+relevance to the target →
+fluent, well formatted
+D formula
+G Task relevance
+multilingual D formula teaches the target skill
+
+C code Domain relevance
+Wikipedia article A covers the target field
+· chat
+· chat
+multilingual G Diversity & coverage
+adds what is still missing
+linguistic and formatting quality → linguistic and formatting quality →
+
+Illustrative positions.
+
+No universal “high quality”: value depends on the target model.
+
+Lecture 7 · Training data 1 2 3 Quality 4 5 6 7 62 / 85
+
+Three Ways to Measure Data Quality
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+How do we turn “useful for our goal” into a number? A scorer qϕ (x) ∈ [0, 1] ​
+
+1 · Heuristic rules score 0.62 + cheap and transparent
+punctuation, repeated lines, line length − brittle; blind to meaning
+
+2 · Learned classifier score 0.78 + fast on trillions of tokens
+trained on chosen examples (DCLM) − inherits its training examples
+
+3 · Model-based score score 0.85 + flexible notion of quality
+an LLM rates pages 0–5 (FineWeb-Edu) − costly; the rater has biases
+
+ϕ: parameters of the scorer, not the LLM’s θ. Illustrative scores.
+Examples: FineWeb / FineWeb-Edu · DataComp-LM (DCLM).
+
+Lecture 7 · Training data 1 2 3 Quality 4 5 6 7 63 / 85
+
+Quality Threshold: Precision vs. Coverage
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+Keep(x) = 1[qϕ (x) ≥ τ ]
+​
+
+Threshold τ τ = 0.60 green = relevant, red = not relevant (human labels)
+
+← Drop Keep →
+E C A
+
+F G B D
+q(x)
+0.0 0.2 0.4 0.6 0.8 1.0
+
+A B C D E F G
+Clean web Spam Code Science Long-tail Navigation Multilingual
+
+Kept 3 / 7 Precision 2 / 3 Coverage 2 / 5 Wrongly kept 1 Wrongly dropped 3
+At τ = 0.6, spam B is kept while useful C, E and G are dropped. Toy scores and labels.
+
+A threshold trades precision (what we keep is good) against coverage (what is good is kept).
+
+Lecture 7 · Training data 1 2 3 Quality 4 5 6 7 64 / 85
+
+Does Better Filtering Improve the Model?
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+A filter looks good on labels. How do we know it helps the model?
+
+FineWeb Identical training Shared evaluation
+57% Stricter is not
+unfiltered by quality FineWeb
+= same architecture (1.71B) 46% uniformly better
+FineWeb-Edu
+= same optimizer settings 37%
+33% Threshold above 3:
+= same budget: 350B tokens knowledge, reasoning ↑
+HellaSwag, PIQA ↓
+FineWeb-Edu
+score ≥ 3 kept: 8% of it
+MMLU ARC
+Controlled ablation: change one thing.
+
+Data quality must be evaluated through learning outcomes, capability by capability.
+Sources: Penedo et al., FineWeb §4 · FineWeb-Edu dataset card
+
+Lecture 7 · Training data 1 2 3 Quality 4 5 6 7 65 / 85
+
+Beyond Filtering: We Can Create Training Data
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+Filtering can only select. What if the text we need is scarce or missing?
+Filtered corpus 1 · Rewriting same content, cleaner form Expanded corpus
+Plants are green because of
+plants r green bc of chlorophyl!! chlorophyll.
+
+2 · Expansion derive more text from a document
+Plants are green because of Q: Why are plants green?
+chlorophyll. A: Because of chlorophyll.
+
+missing topics 3 · Targeted generation write text for a missing topic
+topic: photosynthesis A leaf is a tiny kitchen that
+audience: young children cooks with sunlight …
+original + synthetic
+
+Synthetic pre-training text is plain text for next-token prediction — not instruction-tuning pairs (Lecture 8).
+
+Beyond selection: a language model can write training text.
+
+Lecture 7 · Training data 1 2 3 4 Synthetic data 5 6 7 66 / 85
+
+Synthetic Textbooks: Learn from Generated Text
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+How do you generate a whole corpus without getting the same page a million times?
+textbook · for college students
+
+Generation prompt Photosynthesis converts light energy into chemical
+energy, making glucose from CO₂ and water.
+Topic photosynthesis
+story · for young children
+Seed course outline or web page Teacher LLM
+Lily the leaf woke with the sun. “Breakfast time!”
+(Mixtral-8x7B) she said, and drank the light, water and air.
+Audience who is it written for?
+practice · for high school students
+Style textbook · story · exercise
+Q: Why do most leaves look green?
+A: Chlorophyll absorbs red and blue, reflects green.
+
+Cosmopedia: 30M+ files, 25B tokens, under 1% duplicate content. The teacher “may sometimes hallucinate”.
+
+Diversity is designed into the prompts: many topics × audiences × styles.
+Sources: Cosmopedia (2024) · TinyStories · Textbooks Are All You Need
+
+Lecture 7 · Training data 1 2 3 4 Synthetic data 5 6 7 67 / 85
+
+Rewrite Instead of Discard: Nemotron-CC
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+A page has useful facts but poor form. Must we throw it away?
+A document the quality filter scores low Filter-only pipeline Nemotron-CC
+built from Common Crawl
+Imperfect text Remove its information is lost
+how do plants eat?? ok so
+4.4T original 1.9T
+basically the leafs take in sun
++ co2 and make sugar, thats Rewrite instead of discard synthetic
+photosynthesis lol. SUBSCRIBE!!
+Rewritten text Low-quality pages → rephrased
+LLM rewrites Plants make their own food High-quality pages → Q&A,
+through photosynthesis. Leaves distilled text, knowledge lists
+Wikipedia style absorb sunlight and carbon
+dioxide and produce sugar.
+Why: aggressive filtering
+Same facts, new form — no new knowledge. removes 90% of the data.
+
+Outputs were only rule-filtered: the authors “did not verify the factual accuracy”.
+
+Rewriting recovers discarded data — and makes verification the open problem.
+Source: Su et al., Nemotron-CC (2024)
+
+Lecture 7 · Training data 1 2 3 4 Synthetic data 5 6 7 68 / 85
+
+Synthetic Data Is Not Automatically Better
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+What can go wrong when a model learns from model-written text?
+
+1 · Hallucinated facts 2 · Reduced diversity 3 · Feedback loops
+Fluent, but wrong. Clusters on a few patterns. Model text, again and again.
+
+Once upon a time, a leaf … real tails vanish
+“Plants absorb oxygen and
+Once upon a time, a tree …
+release carbon dioxide.”
+Once upon a time, a seed …
+
+Check Check Check
+Check facts against the source Audit diversity; deduplicate Keep real data in the mix
+
+Model collapse: training on model output, generation after generation, erases the tails — avoidable by keeping real data
+alongside.
+
+Synthetic data trades collection scarcity for generation and verification challenges.
+Sources: Shumailov et al., Nature 631 (2024) · Gerstgrasser et al. (2024).
+
+Lecture 7 · Training data 1 2 3 4 Synthetic data 5 6 7 69 / 85
+
+What Is a Data Mixture?
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+We have several pools of data. How much of each does the model see?
+
+General p1 α1 = 0.6 ① pick a domain k with probability αₖ
+② draw one chunk from that domain
+​
+
+Training stream (fixed-length chunks)
+Code p2 α2 = 0.2
+​
+
+Weighted
+sampler
+
+20 chunks: 12 General · 4 Code · 4 Science
+Science p3 in the long run 60% · 20% · 20%
+
+α3 = 0.2
+​
+
+K K
+ptrain (x) = ∑ αk pk (x)
+​ ​ ​ ∑ αk = 1,
+​ ​ αk ≥ 0
+​
+
+k=1 k=1
+
+Unit: fixed-length chunks, so chunk shares = token shares.
+
+Lecture 7 · Training data 1 2 3 4 5 Mixture 6 7 70 / 85
+
+Data Mixing Is a Fixed-Budget Allocation
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+With a fixed token budget, what does it cost to give one domain more?
+Mixture A total T = 100B tokens
+
+General 60B Code 20B Science 20B
+
+20B tokens: General → Code
+Mixture B total T = 100B tokens
+
+General 40.0B Code 40.0B Science 20.0B
+
+General Code Science Set 60 / 20 / 20 Set 40 / 40 / 20
+Lower bar 40.0% / 40.0% / 20.0% Total 100.00B
+
+L(θ; α) = ∑ αk Ex∼pk [ℓ(θ; x)]
+​ ​
+
+​
+​ ⇒ ∇θ L = ∑ αk ∇θ Ex∼pk [ℓ(θ; x)]
+​ ​ ​ ​
+
+​
+​
+
+k k
+
+Every token given to one domain is taken from another; which mix is better must be measured.
+
+Lecture 7 · Training data 1 2 3 4 5 Mixture 6 7 71 / 85
+
+Data Mixture Is Not the Same as Diversity
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+Two mixtures have the same domain shares. Are they the same data?
+Mixture A Mixture B
+by domain by domain
+
+General 60% Code 20% Science 20% = General 60% Code 20% Science 20%
+
+the same data, by language the same data, by language
+
+English 95% ≠ English 70% other 30%
+
+other languages 5%
+
+Domain shares do not fix: language topic difficulty genre long-tail cases
+
+Illustrative shares; more diversity is not automatically better.
+
+Weights set shares between domains; diversity lives inside them.
+
+Lecture 7 · Training data 1 2 3 4 5 Mixture 6 7 72 / 85
+
+Can We Optimize Data Mixtures Automatically?
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+How do we choose the weights without training a huge model for every candidate?
+
+1 Candidate 2 Train small 3 Measure 4 Fit a regression 5 Select & train
+random mixtures proxy models validation loss mixture → loss the large model
+
+loss
+
+recommended mixture
+
+Large model
+1B params, 25B tokens
+one per mixture predicted best
+1M params, 1B tokens share of one domain → assumes rankings transfer
+RegMix: 512 of them
+
+Manual: intuition, untested · Data-driven: small runs + a predictor · DoReMi: robust reweighting on one proxy model.
+
+RegMix: learn from small models, decide for the large one.
+Sources: Liu et al., RegMix · Xie et al., DoReMi
+
+Lecture 7 · Training data 1 2 3 4 5 Mixture 6 7 73 / 85
+
+Data Mixtures Can Change During Training
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+Must the mixture weights stay fixed for the whole run?
+Stage 1 · pre-training Stage 2 · mid-training
+
+Mixture
+ₖ
+weights α (t) broad data: mostly web text
+schematic
+
+more targeted: curated, math, synthetic →
+
+Learning to zero
+rate η(t)
+warm-up, then decay
+training steps →
+
+ptrain (x, t) = ∑ αk (t) pk (x)
+​ ​ ​ ​
+
+k
+
+OLMo 2: a 3.9T-token, over-95%-web mix, then “mid-training” on curated, math and synthetic data.
+
+The training data distribution can be scheduled, just like the learning rate.
+
+Lecture 7 · Training data 1 2 3 4 5 Mixture 6 7 74 / 85
+
+Unique Data Is Not Training Exposure
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+The mixture asks for 20B code tokens, but only 5B exist. What does the model read?
+Unique tokens available
+
+General 100B unique
+
+Code 5B unique
+
+Tokens processed during training (budget 100B) Exposure ratio
+80B ÷ 100B
+General never read 80B processed
+less than one pass
+0.8×
+20B ÷ 5B
+Code 1 2 3 4 20B processed
+on average, 4 passes
+4×
+
+Tprocessed,k
+Exposure ratiok =
+​
+
+Tunique,k
+​
+
+​
+
+4× is an average. Repeats add exposure, not information — and raise memorization risk.
+
+A large mixture weight on a small pool means repetition, not more data.
+
+Lecture 7 · Training data 1 2 3 4 5 6 Sampling 7 75 / 85
+
+From Documents to Training Sequences
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+Documents have every length. How do they become the fixed-length rows of a batch?
+Documents Token stream Packed sequences L = 8
+
+Doc 1 5 tokens EOD
+EOD
+
+Doc 2 3 tokens EOD EOD EOD
+
+Doc 3 6 tokens EOD = end-of-document marker EOD PAD PAD PAD PAD PAD PAD PAD
+
+7 PAD, only at the very end
+
+Pad each document alone 24 slots for 17 tokens: 71% used
+
+EOD is a token, not a mask: cross-document attention and boundary loss are separate choices (Decision 2).
+
+Cutting and packing decide which contexts the model trains on.
+
+Lecture 7 · Training data 1 2 3 4 5 6 Sampling 7 76 / 85
+
+Target Mixture vs. Realized Sampling
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+We set the weights to 60 / 20 / 20. Is that what each batch contains?
+Target mixture Share of each domain after n chunks
+100%
+General 60% Code 20% Science 20%
+
+Realized stream: the first 96 chunks drawn target
+60%
+
+20%
+
+First batch (16 chunks): 12 / 1 / 3 chunks 75% / 6% / 19% 0%
+1 16 256 4096
+After 4096 chunks: 60.2% / 20.1% / 19.6% chunks drawn, n (log scale)
+
+Independent chunk draws. Sampling whole documents would tilt token shares toward long ones.
+
+The model sees the realized distribution — log it and check it.
+
+Lecture 7 · Training data 1 2 3 4 5 6 Sampling 7 77 / 85
+
+How Do We Know Our Data Pipeline Works?
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+Every stage changed the training distribution. How do we test a data decision?
+Controlled ablation change one data decision DataComp-LM (DCLM)
+a public testbed for data experiments
+Data recipe 1 Identical training
+baseline
+= same model and optimizer
+240T tokens in the common pool
+Compare
+= same token budget only the data differs fixed training recipes, 412M–7B models
+Data recipe 2
+one change = same evaluation suite 53 downstream evaluations
+
+Dataset-level checks before training · cheap Model-level checks after training · costly
+duplication statistics filter errors on audited samples validation loss domain-specific performance
+domain and language coverage benchmark contamination general capabilities data efficiency
+realized sampling shares robustness and generalization
+
+Dataset checks: is the data as intended? Only model results show whether it helps.
+Source: Li et al., DataComp-LM (2024)
+
+Lecture 7 · Training data 1 2 3 4 5 6 7 Evaluation 78 / 85
+
+Design Your Own Training Data Recipe
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+You are training a small LLM for scientific question answering. An example recipe:
+Stage Choice Validation Resulting training distribution
+
+Sources web, papers, textbooks, code provenance and licence log
+40% Science
+Cleaning main text; keep formulas audit removed samples
+
+feedback
+Deduplication near-duplicates per source duplicate rate before / after 40% General
+
+Quality score scientific usefulness precision and coverage 20% Code
+
+Synthetic rewrite noisy lecture notes spot-check the facts
+Train & evaluate
+Mixture science 40 · general 40 · code 20 small proxy runs
+Results revise the recipe: iterate.
+Exposure cap repeats of small pools log exposure ratios
+Evaluation held-out science QA + general decontaminate; ablate
+
+YOUR TURN · 90 SECONDS Which three data decisions would you prioritize, and how would you validate them?
+
+Training data is not just collected. It is curated, generated, mixed, and sampled to shape
+what the model learns.
+
+Lecture 7 · Training data 1 2 3 4 5 6 7 Evaluation 79 / 85
+
+Scaling Law: Scale and Training Loss
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+With finite compute, how large a model should we train, and for how long?
+A representative empirical scaling law
+
+A B
+L(N , D ) ≈ E + +
+Nα Dβ
+​ ​
+
+N · model parameters
+How much capacity?
+
+D · training tokens processed
+How much training exposure?
+Each curve: one fixed FLOPs budget.
+Horizontal: parameters N · Vertical: final loss. E, A, B, α and β are fitted constants.
+The relation depends on the training setting.
+
+At fixed compute, choose model size and training exposure together.
+Source: Hoffmann et al. (2022), Figure 3 (left) and §3.3. The plot is empirical, not a universal curve.
+
+Lecture 7 · Compute budget 1 Scaling law 2 Allocation 3 Recipes 4 Pipeline 5 Next 80 / 85
+
+Compute Distribution: Where the Budget Goes
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+How does a compute budget become a model size and a training data stream?
+Ctrain ≈ 6N D
+​
+
+1 · Model capacity 2 · Training exposure 3 · Domain allocation
+
+Science General Code
+N parameters × D tokens 40% 40% 20%
+
+Fixed C: increasing N leaves fewer tokens D. ₖ ₖ
+D =α D
+D is processed tokens, including repeated exposure. Same 40 / 40 / 20 recipe as slide 79.
+
+4 · Execution checks
+source pools & exposure (75) packing (76) tokens per update × steps
+
+Choose N and D jointly, then distribute D using the data recipe.
+Approximate main-training FLOPs for comparable dense-model settings. Pilot and evaluation costs are tracked separately.
+
+Lecture 7 · Compute budget 1 Scaling law 2 Allocation 3 Recipes 4 Pipeline 5 Next 81 / 85
+
+Recipe A / B / C: One Compute Budget
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+What stays equal, and what changes, across these three training recipes?
+Fixed: CLM · AdamW · same data recipe · comparable dense-model training settings.
+
+Candidate N D Science 40% / General 40% / Code 20%
+
+Recipe A 1B 200B 80B 80B 40B
+
+Recipe B 2B 100B 40B 40B 20B
+
+Recipe C 4B 50B 20B 20B 10B
+
+N D = 200 × 1018 ⟹ Ctrain ≈ 1.2 × 1021 FLOPs
+​
+
+30 seconds: what evidence would let you choose A, B or C?
+Use validation loss, science QA and general capabilities to choose.
+Illustrative candidates, not measured results. Bar length shows total processed tokens; the data shares stay fixed.
+
+Lecture 7 · Compute budget 1 Scaling law 2 Allocation 3 Recipes 4 Pipeline 5 Next 82 / 85
+
+Overall Pipeline: From Recipe to Base Model
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+How do the four decisions become one executable pre-training run?
+Training task Update rule Training data Compute budget
+CLM AdamW curated pools main-training C
+valid-target loss batch + LR schedule science / general / code choose N and D
+
+A/B/C Pilot + validate Select recipe Train + monitor Evaluate Base Model
+candidate recipes small-scale runs compare evidence stop at D budget loss + target tasks save checkpoint θ
+
+Validation feedback; revise only within the remaining budget.
+Pilot and evaluation compute are tracked separately from the main-training budget.
+
+A complete recipe produces a monitored run and a reusable base checkpoint.
+
+Lecture 7 · Compute budget 1 Scaling law 2 Allocation 3 Recipes 4 Pipeline 5 Next 83 / 85
+
+Base Model is just the beginning
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+What comes after the base model has learned to predict text?
+
+This lecture · Pre-training Next · Post-training a base model
+
+Synthetic pre-training text and late-stage data mixing still help build the base checkpoint.
+
+Pre-training builds language and domain capabilities.
+Post-training adapts responses to instructions and preferences.
+Next: Post-training a base model.
+Typical path; post-training recipes vary. Figure: Alammar & Grootendorst, Chapter 12, Fig. 12.4 (supplied course asset).
+Lecture 7 · Compute budget 1 Scaling law 2 Allocation 3 Recipes 4 Pipeline 5 Next 84 / 85
+
+Buffer & Questions · Up to 10 Minutes
+1 · Training task 2 · Update rule 3 · Training data 4 · Compute budget
+
+If clarification is needed If time remains
+Loss vs probability. Revisit a recipe that needs stronger evidence.
+Gradient vs update.
+Fixed compute vs growing compute.
+
+Use this time to resolve the four decisions. The teaching scope remains the five learning
+outcomes.
+
+Lecture 7 · Buffer & questions 85 / 85

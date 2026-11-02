@@ -1,0 +1,1345 @@
+DSAI4207 Introduction to Large Language Models
+Lecture 5: Large Language Model Full Architecture
+
+F R O M O N E T R A N S F O R M E R B L O C K T O A M U LT I M O D A L L L M
+
+Xingyi Yang
+Hong Kong Polytechnic University
+
+Thank You for Showing Up
+
+You picked the least convenient slot on the
+calendar.
+
+Mid-Autumn
+→ Today · Lecture 5 → National Day
+mooncakes: gone you are here holiday mode: loading
+
+Attendance today is a rare mix of dedication and excellent alarm
+settings.
+Cartoon icons: Twemoji, CC-BY 4.0
+Lecture 5 · Welcome
+
+Today's Plan
+
+MICRO MACRO EXTENSION
+
+I II III IV
+10-MIN
+BREAK
+Opening Wrap-up
+the hook Complete Build the Images In Multimodal read a config
+the Block Text LLM LLM
+Position · FFN Decoder-only Patches · ViT Bridges · patterns
+Norm · Assemble tokens → logits CLIP BLIP-2
+
+Build one block → assemble the whole model → extend its input.
+
+Lecture 5 · Overview
+
+Attention Is All You Need?
+
+2017: “Attention Is All You Need”
+QK ⊤
+Attention(Q, K, V ) = softmax( )V ​
+
+dk ​ ​
+
+We know attention. Is it really all an LLM needs?
+
+The title is a slogan, not a mistake: it meant “no recurrence needed”.
+
+Lecture 5 · Opening
+
+Open Any LLM on Hugging Face
+
+{
+"architectures": ["LlamaForCausalLM"],
+"hidden_size": 4096,
+"intermediate_size": 11008,
+How many lines can
+"num_hidden_layers": 32,
+"num_attention_heads": 32, you explain?
+"hidden_act": "silu",
+"max_position_embeddings": 4096,
+Lecture 4 covers one
+"rms_norm_eps": 1e-05,
+"rope_theta": 10000.0, line: attention heads.
+"vocab_size": 32000, By the end of today: every line.
+"tie_word_embeddings": false
+}
+
+Excerpt of meta-llama/Llama-2-7b-hf config.json
+
+Lecture 5 · Opening
+
+Where Do 6.7B Parameters Live?
+
+Place your bet: what share of Llama-2-7B sits in attention?
+
+Attention 32% FFN 64%
+
+Attention · 2.1B FFN · 4.3B Embedding + LM head · 0.26B (4%)
+
+Most parameters are not in attention — the FFN holds about two-thirds.
+
+Lecture 5 · Opening
+
+What If We Only Stack Attention?
+
+Stack attention layers and nothing else — what happens to the
+tokens?
+
+Attention only, deep + Residual + FFN
+Token vectors converge — every vs. Skip paths keep each token; FFNs
+token looks alike. slow the collapse.
+
+Attention is necessary, not sufficient — depth needs residuals and FFNs.
+Dong, Cordonnier & Loukas (2021), “Attention is not all you need”
+
+Lecture 5 · Opening
+
+What the Title Didn't Mention
+
+Attention is necessary, but it is not the complete machine.
+
+Tokens
+↓
+Embedding
+↓
+① Order?
+↓
+Attention
+↓
+② Per-token computation?
+↓
+③ Stable depth?
+↓
+④ Output?
+↓
+Next-token Probability
+
+Not a new part to learn — four missing parts to assemble into one machine.
+
+Lecture 5 · Opening
+
+From Four Slots to Today's Plan
+
+Text LLM
+
+Text → ? → ? → Next Token
+
+Micro Macro Extension
+Inside one block The whole text LLM Images in
+Part I Part II Parts III–IV
+
+Build one block, then the whole model, then extend its input.
+
+Lecture 5 · Opening
+
+Part I · Complete the Block
+
+L E C T U R E 5 · F O U R PA R T S
+I N T H I S PA R T
+
+I Complete the Block 1 Position NOW
+MICRO
+
+II Build the Text LLM 2 Feed-Forward Networks
+MACRO
+
+3 Residual + Normalization
+III Images In
+EXTENSION
+
+4 Assemble the Block
+IV Multimodal LLM
+EXTENSION
+
+Where does word order enter the model?
+
+Part I · Micro › ① Position
+
+Order Changes Meaning
+config: rope_theta
+
+Dog bites man. ≠ Man bites dog.
+
+Bag of tokens Ordered sequence
+vs.
+{dog, bites, man} position 1 → 2 → 3
+
+Language depends on who appears where.
+
+Part I · Micro › ① Position
+
+Attention Alone Cannot Tell Order
+
+Where does this path say
+“first”?
+
+Without position, self-attention is
+permutation-equivariant.
+
+A causal mask is only a weak
+order cue.
+
+Part I · Micro › ① Position
+
+What vs Where
+
+Token embedding Position embedding
+cat → 0.2 -0.7 1.1 … pos 1 pos 2 pos 3
+
+Answers “What?” Answers “Where?”
+
+We reuse the embedding you already know; position adds a coordinate.
+
+Part I · Micro › ① Position
+
+Absolute Position: x⁽⁰⁾ = e(x) + p
+
+(0)
+xi = e(xi ) + pi
+​ ​ ​
+
+token embedding position vector input state
+e(xi) + pi = xi(0)
+
+Both vectors must share the same width, dmodel, so they can be added.
+
+Part I · Micro › ① Position
+
+Learned or Fixed Position Vectors
+
+Learned Fixed (sinusoidal)
+One trainable vector per position ID or Sin/cos waves, no training (original
+(BERT, GPT-2). Transformer).
+
+Either way: one dmodel vector per position, added to the token.
+
+Part I · Micro › ① Position
+
+Sinusoidal Position Encoding
+
+PE(pos,2k) = sin(pos / 100002k/d)
+
+PE(pos,2k+1) = cos(pos / 100002k/d)
+
+pos: token position
+k: feature-pair index
+d: model width
+
+A structured, multi-frequency signal — RoPE reuses the idea.
+
+Part I · Micro › ① Position
+
+Reading the Sinusoidal Heatmap
+
+Fast vs. slow
+Axes
+Fast columns separate neighbours; slow
+Rows = position, columns = dimension.
+ones span long ranges.
+
+▶ Live demo · Absolute Position Encoding, Explored
+Part I · Micro › ① Position
+
+From Absolute to Relative Position
+
+Absolute Relative
+→
+Must infer distance from pm, pn. How far is this key from the query?
+
+Language often depends on distance more than absolute index — “last word”
+vs. “ten sentences ago”.
+
+Part I · Micro › ① Position
+
+RoPE ①: Rotate Q and K, Not the Hidden State
+
+′
+qm​= Rm qm ,
+​ ​ kn′ = Rn kn
+​ ​
+
+Query at position m Key at position n
+
+qm ↻ Rm q′m kn ↻ Rn k′n
+
+RoPE rotates only Q and K inside attention — it is not added to the
+hidden state, and V is untouched.
+
+Part I · Micro › ① Position
+
+RoPE ②: 2-D Rotation, Then Predict
+
+Position m sets angle mθ; position n
+sets angle nθ.
+The angle difference is (n−m)θ.
+Absolute angles create a relative
+phase difference.
+
+Predict the score for a 60° gap, then a 90° gap — check in the demo.
+
+Same distance, same score — the score depends only on n − m.
+
+▶ Live demo · RoPE Encodes Position by Rotation
+Part I · Micro › ① Position
+
+RoPE ③: Feature Pairs, Different Frequencies
+
+x′2k cos(mθk ) − sin(mθk )
+( ′ )=( )( )
+​ ​ ​ x2k ​
+
+x2k+1 sin(mθk ) cos(mθk ) x2k+1
+​ ​ ​ ​
+
+​ ​ ​ ​
+
+Group features into pairs.
+Each pair has its own frequency θk.
+Fast pairs: near; slow pairs: far.
+Model width unchanged.
+
+Part I · Micro › ① Position
+
+RoPE ④: The Score Depends on n − m
+
+R⊤ R = I, (Rm q )⊤ (Rn k ) = q ⊤ Rm
+​ ​
+⊤
+Rn k = q ⊤ Rn−m k
+​ ​ ​
+
+Same rotation Different positions
+preserves each vector's norm and their dot Rm⊤Rn=Rn−m, so the QK score depends
+product. only on the relative offset n − m.
+
+RoPE inserts relative position directly into the attention score.
+
+Part I · Micro › ① Position
+
+Absolute vs RoPE: Side by Side
+
+Absolute RoPE
+
+Acts on Input embedding Q and K, every layer
+
+Encodes Absolute index Relative offset n − m
+
+Changes hidden state? Yes No
+
+Extra parameters Learned only None
+
+From Part II on, we use RoPE.
+
+Part I · Micro › ① Position
+
+Part I · Feed-Forward Networks
+
+L E C T U R E 5 · F O U R PA R T S
+I N T H I S PA R T
+
+I Complete the Block ✓ Position
+MICRO
+
+II Build the Text LLM 2 Feed-Forward Networks NOW
+
+MACRO
+
+3 Residual + Normalization
+III Images In
+EXTENSION
+
+4 Assemble the Block
+IV Multimodal LLM
+EXTENSION
+
+After tokens communicate, who computes per
+token?
+
+Part I · Micro › ② Feed-Forward Networks
+
+Communication vs Computation
+config: intermediate_size · hidden_act
+
+Attention Feed-Forward Network
+Moves information across token + Transforms features within each
+positions. token.
+
+x₁ x₂ x₃
+
+↘ ↓ ↙
+Attention → contextualized x₂′
+
+Every block alternates the two — each new part falls in one bin.
+
+Part I · Micro › ② Feed-Forward Networks
+
+FFN: Per-Token, Shared Weights
+
+One FFN, applied independently to
+every position.
+
+Shared weights; no token-to-
+token arrows.
+
+Part I · Micro › ② Feed-Forward Networks
+
+FFN Shapes: d_model → d_ff → d_model
+
+FFN(x) = W2 σ(W1 x + b1 ) + b2
+​ ​ ​ ​
+
+Input Hidden Output
+dmodel = 4096 dff = 16384 dmodel = 4096
+
+Classic rule: dff = 4×dmodel; the output returns to dmodel so it can be added back.
+
+Expansion adds workspace, not information: widen, compute, project
+back.
+
+Part I · Micro › ② Feed-Forward Networks
+
+Why the Activation Matters
+
+Expand Activate Project
+xW1 GELU / SiLU W2
+
+Without activation With activation
+vs.
+W2W1 = W′: still one linear map. Nonlinear feature interactions.
+
+Part I · Micro › ② Feed-Forward Networks
+
+SwiGLU: Formula and Gate
+
+FFN(x) = Wdown (SiLU(xWgate ) ⊙ xWup )
+​ ​ ​
+
+value path gate path ×
+
+project down
+
+The gate scales each expanded channel
+by content.
+
+Gates features, never mixes
+positions. RomanM82 / Wikimedia Commons · CC BY-SA 4.0 ·
+analogy only
+
+Part I · Micro › ② Feed-Forward Networks
+
+SwiGLU Shapes and the 8/3 Rule
+
+gate = silu(x @ W_gate) # [tokens, d_ff]
+value = x @ W_up # [tokens, d_ff]
+mixed = gate * value # [tokens, d_ff]
+y = mixed @ W_down # [tokens, d_model]
+
+dmodel → dff × dff → dmodel
+
+8/3 rule: dff ≈ 8/3 · dmodel — 4096 → 11008.
+
+Per layer: 3 × 4096 × 11008 ≈ 135M → × 32 layers ≈ 4.3B — that 64%.
+
+Part I · Micro › ② Feed-Forward Networks
+
+Part I · Stable Depth
+
+L E C T U R E 5 · F O U R PA R T S
+I N T H I S PA R T
+
+I Complete the Block ✓ Position
+MICRO
+
+II Build the Text LLM ✓ Feed-Forward Networks
+MACRO
+
+3 Residual + Normalization NOW
+
+III Images In
+EXTENSION
+
+4 Assemble the Block
+IV Multimodal LLM
+EXTENSION
+
+How do 32 stacked layers stay stable?
+
+Part I · Micro › ③ Stable Depth
+
+Residual Path: y = x + Δx
+config: rms_norm_eps
+
+y = x + Δx
+The identity path keeps x available.
+The sublayer learns an update Δx.
+Gradient view: ∂y/∂x = I + ∂Δx/∂x — the
+identity term provides a direct path.
+
+A sublayer proposes an update Δx; it never replaces the state.
+
+Part I · Micro › ③ Stable Depth
+
+Residual Stream as Working Memory
+
+initial state + attention update + FFN update + later updates
+
+Each block reads the shared state and writes a
+refinement.
+Residual stream = the T×d_model state every layer reads and writes.
+
+Part I · Micro › ③ Stable Depth
+
+Deep Stacks Drift in Scale → Normalization
+
+xℓ+1 = xℓ + Δxℓ
+​ ​ ​
+
+x0 + Δx0 x1 + Δx1 x2 … xN
+
+Layer 1 4 8 12
+
+Illustrative hidden-state norm 1.0× 1.6× 2.7× 4.3×
+
+Later sublayers read a state shaped by every earlier update; its scale is no longer
+controlled by any single layer.
+
+Part I · Micro › ③ Stable Depth
+
+LayerNorm: One Token, Across Features
+
+Statistics run across one token's
+features — never across tokens.
+
+token 1 0.4 -1.2 2.1 0.7
+
+token 2 -0.3 0.8 1.0 -0.5
+
+Each token gets its own μ and
+σ.
+
+Part I · Micro › ③ Stable Depth
+
+LayerNorm in Four Steps
+
+d d
+1 1
+μ = ∑ xj
+​ ​ ​ σ = ∑(xj − μ)2
+2
+​ ​ ​
+
+d j=1 d j=1
+xj − μ
+^j =
+x
+​
+
+σ2 + ϵ
+​ ​
+
+​
+
+① Mean ② Variance ③ Center ④ Scale
+μ σ² xj−μ divide by √(σ²+ε)
+
+d = hidden features (not sequence length); ε only keeps the division
+stable.
+
+Part I · Micro › ③ Stable Depth
+
+Worked Example: x = [1, 2, 3]
+
+1+2+3
+μ= =2
+3
+​
+
+2 2 2
+2 (1 − 2) + (2 − 2) + (3 − 2) 2
+σ = = ⇒ σ ≈ 0.816
+3 3
+​ ​
+
+−1 0 1
+^ = [ 0.816
+x ​ , 0.816
+​ , 0.816
+​ ] ≈ [−1.225, 0, 1.225]
+
+Center 2, scale ≈ 0.816 → mean 0, variance ≈ 1 (ε ignored).
+
+Part I · Micro › ③ Stable Depth
+
+Learnable γ and β
+
+yj = γj x
+​ ^ j + βj
+​ ​
+
+normalized output
+x̂ ×γ rescale +β y
+
+Normalization provides a reference scale; one learnable pair per feature
+lets the model recover the scale and offset it needs.
+
+Part I · Micro › ③ Stable Depth
+
+LayerNorm vs BatchNorm
+
+Method Statistics mainly run over Depends on other examples?
+
+BatchNorm batch-related axes Yes during training
+
+LayerNorm features of the current token / example No
+
+LayerNorm behaves consistently even when sequence batches and batch
+sizes change.
+
+▶ Live demo · LayerNorm vs BatchNorm vs GroupNorm
+Part I · Micro › ③ Stable Depth
+
+RMSNorm
+
+d
+1 xj
+RMS(x) = ∑ x2j + ϵ yj = γj
+​
+
+RMS(x)
+​ ​ ​ ​ ​ ​ ​
+
+d j=1
+
+LayerNorm RMSNorm
+vs.
+Center + scale Scale without mean centering
+
+One fewer statistic and no bias term — cheaper to compute, and
+common in modern LLMs. Not claimed to be better on every task.
+
+Part I · Micro › ③ Stable Depth
+
+Part I · Assemble the Block
+
+L E C T U R E 5 · F O U R PA R T S
+I N T H I S PA R T
+
+I Complete the Block ✓ Position
+MICRO
+
+II Build the Text LLM ✓ Feed-Forward Networks
+MACRO
+
+✓ Residual + Normalization
+III Images In
+EXTENSION
+
+4 Assemble the Block NOW
+
+IV Multimodal LLM
+EXTENSION
+
+How do the parts become one repeated block?
+
+Part I · Micro › ④ Assemble
+
+All Parts Ready: The Assembly Problem
+
+Position + Attention + FFN + Norm + Residual
+
+One shared model width
+Two residual updates: attention first, FFN second
+Attention, then FFN — each paired with a Norm (placement discussed next)
+
+How do these pieces become one repeated program?
+
+Part I · Micro › ④ Assemble
+
+Classic Block ①: Input + Self-Attention
+
+One vector per position; attention mixes across tokens.
+
+Part I · Micro › ④ Assemble
+
+Classic Block ②: Attention Residual
+
+x + SelfAttn(x)
+
+Part I · Micro › ④ Assemble
+
+Classic Block ③: Norm (Post-Norm)
+
+Classic 2017 order: Sublayer → Add → Norm.
+
+Part I · Micro › ④ Assemble
+
+Classic Block ④⑤: FFN + Residual
+
+The FFN performs within-token computation with shared weights; a
+complete block writes two updates — attention first, FFN second.
+
+Part I · Micro › ④ Assemble
+
+Classic Block ⑥: Norm → Complete Block
+
+h = LN(x + SelfAttn(x))
+y = LN(h + FFN(h))
+
+Output: one dmodel vector per
+token.
+
+Part I · Micro › ④ Assemble
+
+Post-Norm vs Pre-Norm
+
+Classic Post-Norm Modern Pre-Norm
+Norm
+x
+x
+Sublayer Sublayer
+Add Add
+x x
+Norm y
+
+y = Norm(x + S(x)) y = x + S(Norm(x))
+
+Only the Norm moves — Pre-Norm is steadier at depth.
+
+▶ Live demo · Where the Norm Goes: Post- vs Pre-Norm
+Part I · Micro › ④ Assemble
+
+Pre-Norm Update ①: Attention
+
+Attention
+x → Norm → RoPE on Q, K →+x→ h
+
+h = x + Attention(Norm(x)) ​
+
+Read Write
+Norm produces the input seen by Output is added to x; the residual path
+Attention. skips Norm.
+
+Part I · Micro › ④ Assemble
+
+Pre-Norm Update ②: FFN
+
+FFN
+h → Norm → SwiGLU (common) →+h→ y
+
+y = h + FFN(Norm(h)) ​
+
+Write
+Read
+Output is added to h (already holds
+Norm produces the input seen by the FFN.
+attention's update).
+
+Part I · Micro › ④ Assemble
+
+Modern Blocks Keep the Same Skeleton
+
+Classic block · Figure 3-29 Modern block · Figure 3-30
+
+RoPE RMSNorm SwiGLU Pre-Norm
+rope_theta rms_norm_eps hidden_act: silu (architecture)
+
+Same four parts — each modern change is a variant you already know.
+
+Part I · Micro › ④ Assemble
+
+Retrieval: Rebuild the Block
+
+x
+↓
+Norm → Attention → +x
+↓
+Norm → FFN → +h
+↓
+y
+
+Norm Attention Norm FFN Residual
+
+Bonus: redraw it again with RoPE, RMSNorm, and SwiGLU labeled in place.
+
+Part I · Micro › ④ Assemble
+
+Is One Block a Language Model?
+
+A block transforms hidden states. What turns them into next-token
+probabilities?
+
+one Transformer block ≠ tokenizer + deep stack + output head
+
+10-minute break
+
+Part I · Micro › Before the break
+
+Part II · Build a Large Language Model
+
+L E C T U R E 5 · F O U R PA R T S
+I N T H I S PA R T
+
+I Complete the Block 1 Origin: the encoder–decoder NOW
+MICRO
+
+II Build the Text LLM 2 Decoder-only + causal mask
+MACRO
+
+3 Tokens → embeddings → N blocks
+III Images In
+EXTENSION
+
+4 Final Norm → LM head → softmax
+IV Multimodal LLM
+EXTENSION
+
+A block is not a language model — what else does
+it need?
+
+Part II · Macro › Build the Text LLM
+
+Encoder–Decoder Transformer
+
+source sequence
+↓
+encoder memory
+↓
+target sequence
+
+Meet via cross-
+attention (Part IV).
+
+▶ Live demo · The Transformer, Piece by Piece
+Part II · Macro › Build the Text LLM
+
+Three Families → Follow Decoder-Only
+
+Encoder-only Decoder-only Encoder–decoder
+Bidirectional self- Causal masked self- Self-attention + cross-
+attention attention attention
+BERT · classification · retrieval GPT-style · completion · chat T5 · translation · summarization
+
+No separate encoder Why it is mainstream
+Causal self-attention, repeated Pre-Norm One objective, parallel training, KV cache
+blocks. at inference.
+
+Decoder-only is today's mainstream — we follow this branch.
+
+Part II · Macro › Build the Text LLM
+
+Causal Mask: Each Token Reads Only the Past
+
+Query \ Key x₁ x₂ x₃ x₄
+
+x₁ ✓ −∞ −∞ −∞
+
+x₂ ✓ ✓ −∞ −∞
+
+x₃ ✓ ✓ ✓ −∞
+
+x₄ ✓ ✓ ✓ ✓
+
+Masked scores get weight 0, so every position trains on P(xt | x<t) in
+parallel.
+
+Part II · Macro › Build the Text LLM
+
+The Full Text LLM (overview)
+
+Tokenizer creates a sequence
+Blocks refine hidden states (RoPE
+inside)
+LM head scores the vocabulary
+
+Text in, next-token
+distribution out.
+
+Alammar & Grootendorst (2024), Figure 3-32
+
+Part II · Macro › Build the Text LLM
+
+Text → Tokens → IDs
+
+“The cat sat on the”
+The cat sat on the
+
+↓ tokenizer ↓
+464 3797 3332 319 262
+
+IDs are vocabulary addresses, not semantic vectors (numbers are
+illustrative only).
+
+Part II · Macro › Build the Text LLM
+
+IDs → Embeddings
+config: vocab_size = 32000
+
+464 → 0.3 -0.1 0.8 …
+
+lookup table one vector per token
+|𝒱| × dmodel → T × dmodel
+
+Part II · Macro › Build the Text LLM
+
+N Blocks Refine the Same State
+config: num_hidden_layers = 32
+
+Embeddings
+↓
+Block 1
+↓
+Block 2
+↓
+Block 3 … Block N
+
+Same width in and out — a richer state.
+Depth = repeated communication + computation.
+
+Part II · Macro › Build the Text LLM
+
+Final Norm
+
+output hidden state
+last block state → Final Norm → hfinal
+
+Not a new block: the un-normalized residual stream gets one last Norm
+before the LM head.
+
+Part II · Macro › Build the Text LLM
+
+LM Head: Hidden State → Logits
+config: tie_word_embeddings = false
+
+z = hfinal WU​ ​
+
++ b is optional; many LLMs drop it and tie WU to the embedding.
+
+hidden state logits
+dmodel WU |𝒱|
+
+Training predicts the next token at every position; generation reads only
+the logits at the last position.
+
+Part II · Macro › Build the Text LLM
+
+Logits → Softmax (with numbers)
+
+e zv ​
+
+P (xt = v ∣ x<t ) =
+∑u∈V e zu
+​ ​ ​
+
+​
+
+​
+
+token logit softmax
+
+mat 8.2 ≈ 0.82
+
+floor 6.7 ≈ 0.18
+
+car 1.1 ≈ 0.00
+
+banana −2.4 ≈ 0.00
+
+Toy sum over 4 candidates; the real softmax sums over all of 𝒱.
+
+Part II · Macro › Build the Text LLM
+
+Text LLM Done: How Can an Image Enter?
+
+If a Transformer ultimately consumes vectors, how could we give it
+an image?
+
+Text LLM (done) Multimodal LLM (next)
+
+Text → Tokens → Image → ? →
+
+Blocks × N → Next Token ? → Next Token
+
+Part II · Macro › Build the Text LLM
+
+Part III · Extend the Input Beyond Text
+
+L E C T U R E 5 · F O U R PA R T S
+I N T H I S PA R T
+
+I Complete the Block 1 Vectors, not words NOW
+MICRO
+
+II Build the Text LLM 2 Image → patches → embeddings
+MACRO
+
+3 Position + vision encoder
+III Images In
+EXTENSION
+
+4 Alignment ≠ generation
+IV Multimodal LLM
+EXTENSION
+
+A Transformer only eats vectors — how can an
+image get in?
+
+Part III · Extension › Images In
+
+A Transformer Consumes Vectors, Not Words
+
+Recap: text → tokens → an ordered vector sequence.
+
+Source Interface
+→
+word, subword, patch, audio an ordered sequence of vectors
+
+Can we turn an image into an ordered vector sequence?
+
+Part III · Extension › Images In
+
+Image → Patches → Sequence
+
+Alammar & Grootendorst (2024), Figure 9-4
+
+A patch plays a token's role; grid position becomes sequence order.
+
+▶ Live demo · From Pixels to Visual Tokens
+Part III · Extension › Images In
+
+Flatten + Project = Patch Embeddings
+
+(1,1) (1,2) (1,3) → (2,1) …
+
+dvision
+2D patch grid flatten 1D patch sequence linear map embedding
+
+ei = vec(patchi )WE
+​ ​ ​
+
+The ordering rule (commonly row-major) is arbitrary but must be
+consistent; all patches share the same projection W_E.
+
+Part III · Extension › Images In
+
+Patches Also Need Position
+
+patch embedding + 2D-derived position = patch input
+
+A sky patch and a road patch may look similar. Where they occur
+matters.
+
+This ViT-side position encoding is a separate system from the LLM-side
+RoPE covered earlier — don't conflate them.
+
+Part III · Extension › Images In
+
+The Vision Encoder Contextualizes Patches
+
+Self-attention lets each patch read
+from other patches.
+
+local color + shape context +
+
+global scene
+
+Patch embeddings → visual
+features.
+Alammar & Grootendorst (2024), Figure 9-2
+
+Part III · Extension › Images In
+
+Alignment ≠ Generation → We Need a Bridge
+
+CLIP output LLM output
+≠
+Image–text similarity Next-token probabilities
+
+Alammar & Grootendorst (2024), Figure 9-6
+
+Similarity is not generation — we still need a bridge + LLM (Part IV).
+
+Part III · Extension › Images In
+
+Part IV · Build a Multimodal LLM
+
+L E C T U R E 5 · F O U R PA R T S
+I N T H I S PA R T
+
+I Complete the Block 1 Why a bridge? NOW
+MICRO
+
+II Build the Text LLM 2 Vision encoder + bridge + LLM
+MACRO
+
+3 Three connection patterns
+III Images In
+EXTENSION
+
+4 BLIP-2, then rebuild the system
+IV Multimodal LLM
+EXTENSION
+
+How do we plug a vision encoder into a text
+LLM?
+
+Part IV · Extension › Multimodal LLM
+
+Why Not Plug In Directly? Width Mismatch
+config: hidden_size = 4096
+
+visual feature LLM token
+dv = 1024 ≠ dmodel = 4096
+
+A projection can map ℝdv → ℝdmodel.
+
+Representation Interface
+The two models learned different feature Widths, token counts, and training
+spaces. objectives may differ.
+
+We cannot assume the interfaces match automatically — the numbers
+here are illustrative, not universal.
+
+Part IV · Extension › Multimodal LLM
+
+Sequence Mismatch: Three Options
+
+Language model
+Vision encoder
+vs. A causal sequence of token-like
+Hundreds of patch features
+states
+
+① Pass every patch, ② compress them, or ③ let text attend to them
+separately?
+
+Part IV · Extension › Multimodal LLM
+
+A Bridge Is a Learned Adapter
+
+vision format → adapter → LLM format
+
+Vision Transformer
+Encoder → Bridge → LLM
+
+Speak
+See
+Conditioned states →
+Pixels → visual features.
+language.
+Demi / Wikimedia Commons · CC BY-
+SA 3.0 · analogy only
+
+The bridge makes seeing compatible with speaking.
+
+Part IV · Extension › Multimodal LLM
+
+Image Lane → Bridge: M×d_v → N_v×d_model
+
+Patchify + M × dv
+Nv × dmodel
+Image → Project + → visual → Bridge → states
+Encode features
+
+M Nv
+→
+Encoder output features Visual tokens sent to the LLM
+
+Projector: Nv = M. Query bridge: Nv < M.
+
+Part IV · Extension › Multimodal LLM
+
+Visual Tokens and the Text Lane
+
+Text lane
+Image lane “What animal is this?”
+[IMG₁] [IMG₂] … [IMGNv]
+Text → Tokenizer →
+d1 d2 … dmodel
+Embeddings
+
+A visual token is an LLM-width vector, not a vocabulary word; text keeps
+its tokenizer.
+
+Part IV · Extension › Multimodal LLM
+
+Visual + Text Tokens = One Context
+
+[IMG₁] [IMG₂] … What animal is this ?
+
+↓ causal Transformer LLM ↓
+It is a cat .
+
+Different models can order visual and text tokens differently — the prefix layout shown here is common but
+not universal.
+
+Part IV · Extension › Multimodal LLM
+
+Pattern 1: Projector (LLaVA)
+
+Vision Features → Linear / MLP Projector → Visual Tokens → LLM
+
+vllm = fproj (vvision )
+​ ​ ​
+
+LLaVA: Nv = M — the simplest interface, but a longer sequence.
+
+Part IV · Extension › Multimodal LLM
+
+Pattern 2: Query Bridge (Q-Former)
+
+1. Learned queries attend to vision
+features.
+2. They select and compress.
+3. Projected states condition the LLM.
+BLIP-2: cross-attention on the
+input side.
+Alammar & Grootendorst (2024), Figure 9-16
+
+Part IV · Extension › Multimodal LLM
+
+Cross-Attention Recap
+
+self
+Q = Hdec ,
+​ K = V = Henc ​
+
+Decoder asks (Q); encoder
+memory answers (K, V).
+
+Part IV · Extension › Multimodal LLM
+
+Pattern 3: Cross-Attention Inside (Flamingo)
+
+LLM residual state
+Self-Attention External visual memory
+Cross- Vision Cross-
+Attention Features → K,V Attention
+
+FFN
+
+Flamingo: internal fusion — new cross-attention layers, input length
+unchanged.
+
+Part IV · Extension › Multimodal LLM
+
+Three Patterns: Trade-offs
+
+Visual
+Pattern Rep. Fusion Trains Upside Cost
+tokens
+
+N_v = M Long
+Projector LLaVA Input Projector Simplest
+(100s) sequence
+
+Query Fixed N_v Compresses
+BLIP-2 Input Q-Former Bottleneck
+bridge (e.g., 32) info
+
+None (no Internal (new New Repeated More
+Cross-attn Flamingo
+input tokens) layers) layers access complex
+
+Model names vary; the three interface patterns are reusable.
+
+Part IV · Extension › Multimodal LLM
+
+Case: BLIP-2
+
+Alammar & Grootendorst (2024), Figure 9-20
+
+Frozen ViT + frozen LLM, joined by a trainable Q-Former.
+
+Part IV · Extension › Multimodal LLM
+
+Retrieval: Reconstruct the Text LLM
+
+TEXT
+↓
+① Order?
+↓
+② Per-token computation?
+↓
+③ Stable depth? × N
+↓
+④ Output?
+↓
+NEXT TOKEN
+
+Fill the four dashed cards before the next slide.
+
+Wrap-up
+
+Read the Config Again
+
+config.json value What it means now
+hidden_size 4096 d_model — the shared width
+num_hidden_layers 32 Blocks × N
+num_attention_heads 32 Attention (Lecture 4)
+intermediate_size 11008 SwiGLU d_ff (8/3 rule)
+hidden_act silu SwiGLU gate
+rms_norm_eps 1e-05 RMSNorm ε
+rope_theta 10000.0 RoPE base frequency
+max_position_embeddings 4096 Longest trained context
+vocab_size 32000 |𝒱|: embedding + LM head
+tie_word_embeddings false Separate LM head matrix
+
+The full title: Attention + Position + FFN + Residual/Norm + Head.
+
+Wrap-up
+
+Leave with Two Maps and Three Questions
+
+Text LLM
+Multimodal LLM
+Token → Embedding (+Pos)
+Image → Vision Encoder →
+→ Transformer × N →
+Bridge → LLM
+Final Norm → LM Head
+
+1. Why is “Attention Is All You Need” an incomplete title?
+2. Why do deep blocks need Normalization and Residuals?
+3. What must be added to turn a text LLM into a multimodal LLM?
+
+Redraw both maps and explain every arrow.
+
+Wrap-up
+
+Thank You — and Happy Holidays!
+
+Thank you, everyone!
+Happy Mid-Autumn Festival & National Day
+多謝各位 中秋節快樂 國慶日快樂
+谢谢大家 · धन्यवाद · Спасибо · Thank you
+
+Cartoon icons: Twemoji, CC-BY 4.0
+
+Thank you
+
+Appendix A1 · Notation & Terminology
+
+Symbol / term Meaning Introduced on
+T Sequence length (number of tokens) IDs → Embeddings
+𝒱 Vocabulary; "vocabulary size" means |𝒱| IDs → Embeddings
+d_model Width of the hidden state at each position Absolute Position
+d_ff Width of the FFN's inner layer FFN Shapes
+x⁽⁰⁾ Layer-1 input state (embedding, plus position if absolute) Absolute Position
+x/h/y A block's input / intermediate / output state Classic Block ⑥
+h_final State after the Final Norm, fed to the LM head Final Norm
+m, n Token position indices (including RoPE) RoPE ①
+Q, K, V Attention's query / key / value (V = values only) Attention Is All You Need?
+Vision-encoder output count, visual tokens sent to the LLM,
+M, N_v, d_v Image Lane → Bridge
+visual feature width
+hidden state The d_model-wide vector at one position Absolute Position
+residual stream The full T×d_model state carried between layers Residual Stream
+patch embedding → visual Three-level naming: linear projection of a patch → vision- Patch Embeddings; Vision
+features → visual tokens encoder output → LLM-width representation after the bridge Encoder; Visual Tokens
+
+Appendix

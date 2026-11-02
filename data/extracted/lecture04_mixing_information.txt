@@ -1,0 +1,944 @@
+DSAI4207 Introduction to Large Language Models
+Lecture 4: Mixing Information Between Tokens
+
+Xingyi Yang
+Hong Kong Polytechnic University
+
+From People to Tokens
+
+People Tokens
+
+Your slides are too Under 100 pages this
+long! time.
+— a student, last week
+
+The animal did not cross because it
+
+“it” reads “animal”
+
+Talking changes what words mean.
+
+Talking changes what people do.
+
+Today: how tokens communicate — the mechanism that lets words
+change each other’s meaning.
+
+What You Will Be Able to Explain
+
+1 2 3
+
+Why Mix? Why Attention? How It Works
+Tokens must exchange Windows and RNNs Q, K, V read context.
+information. fall short.
+
+The goal is the mechanism—not the formula.
+
+Where We Are: One Missing Step
+
+✓ ✓ ✓ ?
+
+Text Tokens Embeds Token ↔ Token
+raw seq discrete 1 vec / tok the missing step
+
+We said an MLP could process sequences. We never said
+how.
+
+Lecture 3: token vectors + neural-network basics. Lecture 4: how
+those vectors communicate.
+
+This Lecture Only Changes the Mixing Layer
+
+Tokens one vector per token
+
+NEW Mixing token ↔ token
+FFN same MLP as last lecture
+
+Output logits → loss
+
+same MLP + same training: forward → loss → backward → update
+
+Only the mixing layer is new.
+
+The Question That Drives This Lecture
+
+How can one token obtain information from other tokens?
+
+The animal did not cross because it
+
+A token becomes contextual only after it can read other tokens.
+
+Three Ways to Move Information
+
+Part I · Can an MLP Process a Sequence?
+
+▶ A fixed-dimensional input
+
+▶ Two ways to use an MLP
+
+▶ The fixed-window limitation
+
+▶ The token-mixing requirement
+
+A Token Sequence Is a Matrix of Vectors
+
+X = [x1⊤; x2⊤; …; xT⊤] ∈ ℝT×d
+
+T Token positions d Features per token
+
+The number of rows can change when the sequence gets longer or
+shorter.
+
+A Fully Connected Layer Needs a Fixed Shape
+
+h = ϕ(Wx + b)
+Input Weights Output
+x ∈ ℝd W ∈ ℝdh×d h ∈ ℝdh
+
+The feature dimension d is built into the weight matrix: d → dh.
+
+Input Length Changes the First Layer
+
+Expected Four Tokens
+x∈ℝ 3d vs. x ∈ ℝ4d
+W ∈ ℝdh×3d The same W no longer fits.
+
+A plain MLP cannot silently change its input dimension at runtime.
+
+Option 1: Apply the Same MLP to Every Token
+
+ht = MLP(xt)
+
+x1 → same MLP → h1
+
+x2 → same MLP → h2
+
+x3 → same MLP → h3
+
+One shared MLP, called once per position: 3 tokens → 3 calls, 5 tokens
+→ 5 calls—the parameters do not depend on length.
+
+But Each Output Sees Only Its Own Input
+
+ht = MLP(xt) ⇒ h depends only on x
+t t
+
+The river bank
+
+Processing every token is not the same as mixing information between
+tokens.
+
+“Bank” Starts from the Same Input Vector
+
+Finance vs. River
+She deposited cash at the bank. They sat beside the river bank.
+
+xbank = E[bank,:]
+
+A Position-Wise MLP Cannot Read “River”
+
+xriver
+river → same MLP → hriver
+
+xbank
+bank → same MLP → hbank
+
+xriver ↛ hbank NO CONNECTION
+
+There is no path from xriver to hbank.
+
+Checkpoint: Does This Operation Mix Tokens?
+
+RETRIEVE
+
+If ht = MLP(xt), can h4 contain information from x1? Why?
+No. The computation of h4 has no dependency on x1.
+
+Option 2 · Concatenate Tokens
+
+zt
+xt−2 ⊕ xt−1 ⊕ xt → fixed-size
+concatenated vector
+
+Now one computation can see multiple token vectors together.
+
+Concatenation Creates a Fixed-Size Window
+
+zt = [xt−L+1; …; xt] ∈ ℝLd
+EXAMPLE WINDOW · L = 3 ONE FIXED MLP INPUT
+
+CONCATENATE
+x1 x2 x3 x1 x2 x3
+→
+three token vectors, each in ℝd zt ∈ ℝ3d
+
+The window length L fixes the MLP input size.
+
+MLP View · Split W into Three Blocks
+
+W = [W(2)|W(1)|W(0)] zt = [xt−2;xt−1;xt] bias
+
+W⁽²⁾ W⁽¹⁾ W⁽⁰⁾ × ₜ₋
+x ₂ ₜ₋
+x ₁ x ₜ + b → h ₜ
+ht = ϕ(W(2)xt−2 + W(1)xt−1 + W(0)xt + b)
+One block of W reads one token slot.
+
+Typical 1D Convolution for Token Mixing
+
+ht = ϕ(b + ∑ℓ=0L−1 K(ℓ)xt−ℓ) K(ℓ) ∈ ℝdh×d
+
+t xt−2 xt−1 xt → same K blocks → h ₜ
+t+1 xt−1 xt xt+1 → same K blocks → hₜ₊₁
+
+K(2) K(1) K(0)
+
+Convolution = the same local weights at every position.
+
+▶ Open sliding-window convolution demo
+
+Fixed Concatenation vs. Shared Convolution
+
+One Window Share W Slide It
+
+ht=ϕ(Wzt+b) → Wt=Wt+1 → h1,…,hT
+fixed MLP input same local rule 1D convolution
+
+Same local math. Weight sharing makes it convolution.
+
+Weakness 1–2 · Fixed Shape, Fake Padding
+
+Wdh×3d · z3d Wdh×3d · z4d
+
+≠
+✓ ✕
+
+VALID SAME CAUSAL
+I agree today PAD I agree PAD PAD I
+
+shorter output fake context less context at the start
+
+The window size is built into W—and padding only fakes the positions that are missing.
+
+Weakness 3 · A Fixed Local Receptive Field
+
+The animal …
+→ did not because it
+
+ht ← [xt−L+1,…,xt]
+Larger L Deeper Dilated still predefined
+
+Outside the receptive field = invisible.
+
+Weakness 4 · No Absolute Position
+
+Position 5 Position 500
+
+K(2) K(1) K(0) K(2) K(1) K(0)
+
+Relative offset ✓ Absolute index ✕
+
+Convolution knows local order—not the absolute index.
+
+What Should a Sequence Model Provide?
+
+Flexible Length Token Mixing Long Range Position Efficiency
+
+T = any xj → hi j≪i i = 1…T parallel
+
+The key design choice: how should information travel?
+
+Two Ways to Move Beyond a Fixed Window
+
+RNN · Step by Step Self-Attention · Direct Read
+ht=f(xt,ht−1) zi=∑jαijvj
+x₁ → h₁ → h₂ → h₃ x₁ x₂ x₃ ⇒ zᵢ
+
+one running state select relevant tokens
+
+Should information travel step by step—or should each token directly access what it needs?
+
+Part II · Sequential Mixing with an RNN
+
+▶ Why a Running State?
+
+▶ RNN Forward Pass
+
+▶ Learning Through Time
+
+▶ Three RNN Bottlenecks
+
+▶ From Recurrence to Attention
+
+01 · How Do We Read?
+
+Page 1 → understand the first page
+
+Memory → retain what was understood
+
+Page 2 → interpret it using the memory
+
+We read the current page while carrying forward what we understood
+before.
+
+From Reading to Recurrence
+
+The next step uses both the new input and the
+result carried from the previous step.
+
+previous memory
+updated memory
+→ passed to the next page
+current page
+
+The GIF illustrates recursion visually. In a sequence, recurrence means
+feeding the previous state into the next update.
+
+Repeat the same update as each new piece of information arrives.
+
+Longer Sequences: Width vs. Steps
+
+Concatenate Wider input
+first x₁ x₂ x₃ → [x₁; x₂; x₃] Length changes the
+one fixed-size network input dimension.
+input
+
+More steps
+Process in
+The input
+steps fθ → h₁ → fθ → h₂ → …
+dimension stays
+one token at a time
+fixed.
+
+More tokens add recurrent steps, while hidden states carry
+information across positions.
+
+The RNN Update
+
+C O M PAC T V I EW
+
+ht−1 → fθ → ht
+
+↑ xt
+
+ht = fθ (ht−1 , xt )
+​ ​ ​ ​ ​
+
+ht−1 ​ ​ ​ , xt ​ ​ ​ , ht ​ ​ ​
+
+previous state current input updated state
+
+From a Loop to an Unrolled RNN
+
+Read the chain left to right: each column has an input xt, a hidden state ht, and an output read from that state.
+
+The loop and the unrolled chain describe the same recurrent
+computation—one shared cell, reused at every step.
+
+A Concrete Vanilla RNN Cell
+
+at = Wh ht−1 + Wx xt
+​ ​ ​ ​ ​ ​ ​ ​ ​ + bh ,
+​
+
+​
+
+previous state current input ​
+
+ht = tanh(at ).
+​ ​
+
+From State to Prediction
+
+o t = Wo h t + b o ,
+​ ​ ​ ​
+
+The animal is → likely next token
+pt = softmax(ot ).
+​ ​
+
+​ ​
+
+State · ht Prediction · pt
+Carried forward. Read from the state.
+
+The state stores features; the output layer turns those features into a
+task prediction.
+
+State Flows Step by Step, One Shared Cell
+
+ht = fθ (ht−1 , xt )
+​ ​ ​ ​
+
+STEP 1 STEP 2 STEP 3
+
+h0 → fθ → h1 → fθ → h2 → fθ → h3
+
+↑ x1 ↑ x2 ↑ x3
+h1 is the output of Step 1—and the memory input to Step 2. All steps share one parameter set
+θ = {Wh, Wx, bh, Wo, bo}: θ⁽¹⁾ = θ⁽²⁾ = ⋯ = θ⁽ᵀ⁾ = θ.
+
+Each new state becomes the next step's memory—always computed by the same cell θ.
+
+▶ Open RNN unroll and state-flow demo
+
+One Loss per Step
+
+Step 1 Step 2 Step T
+h1 → p1 h2 → p2 hT → pT
+loss ℒ₁ loss ℒ₂ loss ℒT
+
+T T
+L(θ) = ∑ Lt = − ∑ log pt (yt )
+​ ​ ​ ​ ​
+
+t=1 t=1
+Shared parameters must collect learning signals from every time step that used them.
+
+Backpropagation Through Time
+
+Legacy figure labels: U ↔ Wx, W ↔ Wh, V ↔ Wo.
+
+Unroll the recurrence, then apply ordinary backpropagation to the
+resulting computation graph.
+
+Figure copied from the reference course LaTeX project.
+▶ Open forward/backward BPTT demo
+
+Long Dependencies Create Long Gradient Paths
+
+t
+∂Lt ∂Lt ∂hj
+= ∏ Jj , Jj :=
+​ ​ ​
+
+∂hk ∂ht ∂hj−1
+​ ​ ​ ​ ​ ​
+
+​ ​ ​
+
+j=k+1
+
+Learning a distant dependency requires
+a product of Jacobians across all
+intermediate steps.
+
+What happens when many Jacobians are multiplied?
+
+Three Questions About the RNN Path
+
+FORWARD · BACKWARD · COMPUTATION
+
+State Gradient Computation
+Can one state Can the gradient Can the steps run in
+preserve everything? survive every step? parallel?
+
+One recurrent path creates three different questions.
+
+Bottleneck 1 · Fixed-Size State
+
+animal → h1 → … → h5 → it
+
+The current token receives one compressed state—not direct access to the earlier
+representations.
+
+Bottleneck 2 · Unstable Gradients
+
+Vanishing Exploding
+100 100 4
+0.9 ≈ 0.00003 1.1 ≈ 1.38 × 10
+signal approaches zero signal becomes unstable
+Factors smaller than 1 shrink the product. Factors larger than 1 amplify the product.
+
+The Jacobian product may vanish or explode.
+
+Bottleneck 3 · Sequential Computation
+
+DEPENDENC Y AND W A IT I NG W IT HIN ONE SEQU ENC E
+
+Dependenc
+h1 → h2 → h3 → … → hT
+y
+
+At first compute wait wait wait wait
+
+Next done compute wait wait wait
+
+Inputs may be ready
+States are still serial
+All xt can already be available during
+ht cannot be computed before ht−1.
+training.
+
+From Recurrence to Direct Access
+
+Part II · three bottlenecks: Fixed-size state Unstable gradients Sequential computation
+
+RNN · Step by Step Attention · Direct Access
+→
+animal → h1 → h2 → it animal ⇢ it
+
+Fixed-size state → direct Long path → shorter path Serial recurrence →
+access parallel mixing
+
+Should information cross every intermediate state—or
+directly access the representations it needs?
+
+Break
+
+10-minute break
+
+After the break: one token will directly read the sequence.
+
+Part III · Attention to Multi-Head Self-Attention
+
+▶ Why Direct Access?
+▶ One Query Reads the Sequence
+▶ From Attention to Self-Attention
+▶ Matrix Form
+▶ Why Multiple Heads?
+How can a token read what it needs directly?
+
+From the RNN Bottleneck to Direct Access
+
+RNN path
+
+xj → hj → hj+1 → hi
+i − j + 1 sequential steps · one shared θ
+
+Attention path
+
+xj → kj, vj → αij vj → zi
+1 step · learned weight αij · parallel over all j
+
+zi = ∑ αij vj
+​ ​ ​ ​
+
+j
+
+Direct access changes the path—but the target still needs a rule for
+choosing sources.
+
+A Token Selects Relevant Context
+
+The target token should decide which earlier representations are
+useful now.
+
+Alammar & Grootendorst (2024), Figure 3-14
+
+Attention as a Soft Lookup
+
+Hard lookup · one exact match Attention · soft match to every
+key
+
+Attention = a weighted average of values, with weights determined by query–key compatibility
+▶ Open soft-lookup demo
+
+Query, Key, and Value Divide the Work
+
+Q K V
+
+Query Key Value
+What do I need? When should I be What information do I
+selected? send?
+
+Queries and keys determine the weights; values determine the content
+of the output.
+
+▶ Open Q/K/V geometry demo
+
+One Target, Many Sources
+
+target “it” The animal did not … context
+→ →
+qit (k1,v1) (k2,v2) (k3,v3) (k4,v4) (kT,vT) zit
+
+qit ​ reads {(kj , vj )}Tj=1
+​ ​ ​
+
+The Query Encodes the Information Need
+
+qit
+target
+→
+“it” What context would help update this
+token?
+
+A query is a learned vector—not a natural-language question.
+
+Keys Route; Values Transport
+
+Key kj Value vj
+
+qi⊤kj αijvj
+Used to compute whether source j is Used to update the target
+relevant. representation.
+
+A source produces both vectors, but only its value enters the final
+mixture.
+
+Compare One Query with Every Key
+
+qit kThe kanimal kdid knot kcross
+
+qit → [sit,1, sit,2, …, sit,T]
+One target produces one compatibility score for every source position.
+
+Dot Product Produces a Compatibility Score
+
+sij = q⊤
+​
+
+i kj
+​ ​
+
+Larger score Smaller score
+Query and key are more strongly The source is less relevant to this
+aligned. target.
+
+A compatibility score is not yet a probability or a reading weight.
+
+Scores Depend on Both Target and Source
+
+Query from “it” A different target query
+[−3.00, −0.36, −3.00, −1.90, [1.8, 0.3, −0.4, 1.1, 0.2]
+−3.00] The ranking changes.
+“animal” ranks highest.
+
+Scores may be negative. Scores need not sum to one. Scores are not reading
+proportions.
+
+Relevance is a relationship between a target query and a source key.
+
+Why Scale the Dot Product?
+
+⊤
+~ q i kj
+sij =
+​ ​
+
+​ ​
+
+dk
+As dk grows Why divide by √dk?
+Unscaled dot products tend to have Keep scores in a range where softmax is
+larger magnitude. less likely to saturate.
+
+Scaling stabilizes the score magnitude before normalization.
+
+Softmax Turns Scores into Reading Weights
+
+q⊤
+i kj
+αij = softmaxj ( )
+​ ​
+
+​ ​ ​
+
+dk ​ ​
+
+T
+αij ≥ 0,​ ∑ αij = 1
+​ ​
+
+j=1
+
+Scaled scores for target i soft Reading weights
+max
+−3.00 −0.36 −3.00 −1.90 −3.00 .05 .70 .05 .15 .05
+j→
+
+For one target i, normalize across source positions j.
+
+One Target Distributes Its Attention
+
+The 0.05
+animal 0.70
+did 0.05
+not 0.15
+cross 0.05
+
+This row is the target token’s reading plan.
+
+Toy values for explanation—not measured model outputs.
+
+Weights Control the Value Mixture
+
+T
+zi = ∑ αij vj
+​ ​ ​ ​
+
+j=1
+
+Weights Values Context
+αi1,…,αiT × v1,…,vT → zi
+
+Weights determine where to read; values determine what enters the
+output.
+
+Attention Combines Selected Information
+
+1 · compare Q with K 2 · normalize scores 3 · use weights to
+sum V
+Alammar & Grootendorst (2024), Figure 3-21
+
+A Tiny Weighted-Sum Example
+
+zit = 0.05vThe + 0.70vanimal + 0.05vdid
+​ ​ ​ ​
+
++ 0.15vnot + 0.05vcross .
+​ ​
+
+​ ​
+
+“animal” contributes most, but the other values are not automatically
+discarded.
+
+One Attention Read Has Four Stages
+
+Match Scale Normalize Gather
+→ → →
+qi⊤kj ÷√dk softmaxj ∑jαijvj
+
+Assemble the One-Query Formula
+
+qi K⊤
+Ai,: = softmax ( )
+​
+
+​ ​
+
+dk ​ ​
+
+qi K⊤
+zi = Ai,: V = softmax ( )V
+​
+
+​ ​ ​
+
+dk ​ ​
+
+one query → one weight row → one output vector
+
+Checkpoint: Trace One Read Operation
+
+TRACE
+Which vectors are compared, which numbers are normalized, and which vectors
+are finally mixed?
+Compare qi with all kj; normalize scalar scores; mix vj.
+
+What Makes It Self-Attention?
+
+Queries, keys, and values are all produced from the same input
+sequence.
+
+“Self” describes the source of Q, K, and V—not “a token only attends to
+itself.”
+
+One Sequence, Three Learned Views
+
+⎧Q
+X ⟶ ⎨K Q=
+K=
+ V in general
+⎩
+​ ​
+
+V
+One input sequence plays three different learned roles.
+
+Learned Projections Create Q, K, and V
+
+Q = XWQ , ​ K = XWK , ​ V = XWV ​
+
+Q K V
+
+reader view matching view content view
+
+The three projection matrices are learned independently.
+
+Read the Shapes Before the Formula
+
+T×d T×dk T×dv
+X ∈ ℝ Q K
+, ∈ ℝ V ∈ ℝ
+WQ, WK ∈ ℝd×dk; WV ∈ ℝd×dv
+Rows Columns
+token positions learned features
+
+Every Token Becomes a Reader
+
+q1 q2 q3 … qT
+
+qi ⟶ Ai,: ⟶ zi
+​ ​ for every i = 1, … , T
+
+Self-attention produces one context-dependent output per token.
+
+▶ Open attention-matrix demo
+
+All Query–Key Comparisons at Once
+
+Sraw = QK⊤ ∈ RT ×T
+​
+
+(Sraw )ij = q⊤
+​ ​
+
+i kj
+​ ​
+
+Scale the Score Matrix
+
+QK⊤
+S= ∈ RT ×T ​
+
+dk ​ ​
+
+One scalar factor rescales every query–key score.
+
+Softmax Produces the Attention Matrix
+
+QK⊤
+A = softmaxrow ( ) ​ ​
+
+dk ​ ​
+
+Each target row is normalized independently across source
+columns.
+
+One Row Is One Token’s Reading Plan
+
+reader ↓ / source → The animal did it
+
+The .70 .10 .10 .10
+
+animal .15 .60 .15 .10
+
+it .05 .70 .10 .15
+
+Ait,: = [.05,\ .70,\ .10,\ .15]
+The highlighted row answers: “Where does the token ‘it’ read?”
+
+One Cell Is One Directed Reading Weight
+
+reader ↓ / source → The animal did it
+
+The .70 .10 .10 .10
+
+animal .15 .60 .15 .10
+
+it .05 .70 .10 .15
+
+(A)i=it, j=animal = 0.70
+​
+
+Target “it” reads source “animal” with weight 0.70.
+
+Every Reader Row Sums to One
+
+T
+∑(A)ij = 1
+​ ​ for every target row i
+j=1
+The .05
+animal .70
+did .10
+it .15
+
+Row-wise softmax creates one source distribution for each target.
+
+Matrix Multiplication Mixes the Values
+
+Z = AV
+(T × T )(T × dv ) ⟶ T × dv
+​ ​
+
+Row i of Z is selected by row i of A.
+
+Scaled Dot-Product Self-Attention
+
+QK⊤
+Attention(Q, K, V) = softmaxrow (
+​ )V ​ ​
+
+dk
+​ ​
+
+match scale normalize gather
+
+Why Multi-Head Attention?
+
+One sentence · several relations
+
+Alice read a book yesterday
+
+Who? What? When?
+read → Alice read → book read → yesterday
+
+One head learns one relation type; several heads read several relations at once.
+
+▶ Open multi-head demo
+
+Multi-Head Architecture
+
+Multi-Head Architecture
+
+Multi-Head Architecture
+
+Multi-Head Architecture
+
+Multi-Head Architecture
+
+Multi-Head Architecture
+
+Multi-Head Architecture
+
+Multi-Head Architecture
+
+Concatenate the Heads and Project
+
+MHA(X) = Concat (head1 , … , headh ) WO
+​ ​
+
+1 · Split 2 · Parallel 3 · Concatenate 4 · Project
+→ → → O
+512 → 8 × 64 attend per head head₁ … head_h W
+
+Single Head vs. Multi-Head
+
+Single Head one view Multi-Head multiple views
+
+Who? Head 1 → A₁ → z₁
+Q K V → A → z
+What? Head 2 → A₂ → z₂
+
+one attention map When? Head 3 → A₃ → z₃
+
+z₁ · z₂ · z₃ → Concat → WO → z
+
+Different heads read different relationships—at the same time.
+
+From Recurrence to Multi-Head Self-Attention
+
+Fixed Window Recurrence Multi-Head Self-
+Attention
+The animal did it
+… x x x … → x₁ → h₁ → h₂ → h₃ → Head 1 Head 2 Head 3
+↗ ↑ ↖
+
+it
+local only step by step direct + parallel
+
+Any token → any token · multiple views at once
+
+From Mixed Tokens to Output
+
+Context mixed vectors → FFN position-wise MLP → Logits Wz + b → Loss softmax → ℒ
+
+← backprop W Q WK WV WO same training as last lecture
+
+Mixing gives context; the FFN and loss turn it into predictions.
+
+Next: Position Mask Residual LayerNorm MLP → Transformer block

@@ -1,0 +1,1649 @@
+DSAI4207 Introduction to Large Language Models
+Lecture 2: Probabilistic Language Modeling
+
+Xingyi Yang
+Hong Kong Polytechnic University
+
+A Simple Example
+
+“The water of Walden Pond is beautifully …”
+
+clear green refrigerator
+highly likely plausible highly unlikely
+
+Given the same context, some continuations are more likely than
+others.
+
+What Does a Language Model Do?
+
+A language model assigns probabilities to possible continuations.
+
+Context in → probabilities over what may come next.
+
+You Already Use Language Models Every Day
+
+You Already Use Language Models Every Day
+
+Chat, search, writing, and code completion all repeatedly ask the same
+question: what comes next?
+
+One Blank, Many Abilities
+
+A simple next-token prediction can require surprisingly rich knowledge.
+World
+“PolyU is located in …” Hong Kong
+Knowledge
+Coreference “Mei checked traffic over … shoulder.” her
+
+“Iroh went into the kitchen to make tea.
+Commonsense Zuko followed him into the …” kitchen
+
+Pattern
+1, 1, 2, 3, 5, 8, 13, … 21
+Reasoning
+
+Why Does Next-Token Prediction Matter?
+
+Free Text supplies its own prediction targets at massive
+Supervision scale.
+
+Predict
+Good prediction can require language, facts, context,
+Requires
+and reasoning.
+Understand
+
+Unified Many tasks can be expressed as: given a context,
+Paradigm predict what comes next.
+
+A deceptively simple prediction task can provide a remarkably powerful
+learning signal.
+
+Language Modeling
+
+At position t, the context is everything we have observed so far:
+x<t = (x1 , … , xt−1 ).
+​ ​ ​
+
+A language model assigns a probability to every possible next
+token:
+pθ (v ∣ x<t ),
+​ ​ v ∈ V.
+∑ pθ (v ∣ x<t ) = 1.
+​ ​ ​
+
+v∈V
+Context in → probability distribution out.
+
+How Do We Learn to Predict the Next Token?
+
+① Context →
+② Predict →
+③ Observe →
+④ Learn
+I like pθ(· | I like) tea ↑ pθ(tea | I like)
+
+Training goal: assign higher probability to the continuations observed in
+real text.
+
+From One Token to a Sequence
+
+If every position has a next-token probability, can we assign a
+probability to an entire sequence?
+T
+pθ (x1:T ) = ∏ pθ (xt ∣ x<t ).
+​ ​ ​ ​ ​ ​
+
+t=1
+
+This → is → fun
+
+Preview: we will derive this factorization from the probability chain rule in Chapter 1.
+
+A sequence score is built from a chain of local next-token predictions.
+
+Language Modeling as Optimization
+
+Training asks us to choose parameters that give observed
+continuations high probability.
+T
+arg max ∑ ∑ log pθ (xt ∣ x<t )
+​ ​ ​ ​ ​ ​
+
+θ
+x1:T ∈D t=1
+​
+
+𝒟 = training corpus · x1:T = one sequence · x<t = context · xt = observed next token ·
+θ = parameters
+
+Choose θ so that real next tokens receive high probability.
+
+Two Questions Hidden in One Equation
+
+The training objective contains two ideas that we need to
+understand.
+pθ (xt ∣ x<t )
+​ ​ ​ ​ arg max ​ ​
+
+θ
+Probability
+Optimization
+
+Probability Optimization
+How do we represent uncertainty over How do we find parameters that
+the next token? assign real text high probability?
+
+We will build both pieces from the ground up, then return to the full
+objective.
+
+Two Lectures, One Language Model
+
+LECTURE 2 LECTURE 3
+Probability & Objective Neural Model
+
++ Context → Network
+pθ(xt | x<t)
+→ Probability
+
+What should the model learn, How does a neural network
+and how do we optimize it? compute the distribution?
+
+Together: a complete trainable language model.
+
+Today’s Roadmap
+
+1. ▶ Probability Foundations
+
+2. ▶ N-gram Models
+
+3. ▶ Maximum Likelihood & Loss
+
+4. ▶ Optimization Foundations
+
+5. ▶ Evaluation & Perplexity
+
+Chapter 1 · Probability Foundations
+
+CHAPTER 1 OF 6
+
+1 Probability Foundations 2 N-gram Models
+
+3 Maximum Likelihood & Loss 4 Optimization Foundations
+
+5 Evaluation & Perplexity 6 Summary & Bridge
+
+Core question: How does uncertainty over a coin become uncertainty
+over the next token?
+
+Why Toss a Coin?
+
+Which team starts? Which end does each team defend?
+
+We know what can happen, but not which outcome will occur.
+Probability describes this uncertainty.
+
+Random Experiment, Outcome, and Sample Space
+
+Toss one fair coin once.
+Random experiment
+An action whose result is uncertain.
+
+Outcome
+One possible result: Heads H or Tails T.
+
+Sample space
+The set of all possible outcomes.
+
+Ω = {H, T}
+
+Probability Foundations 17 / 101
+
+Random Variable and Observed Value
+
+Let X denote the result of the coin toss.
+X ∈ {H, T }.
+
+Before the toss: X After observing Heads:
+The result is uncertain. x=H
+X may take the value H or T. One value has been observed.
+Lowercase x denotes this observed
+value.
+
+A random variable represents an uncertain value; an observation tells
+us which value actually occurred.
+
+Probability Foundations 18 / 101
+
+A Probability Distribution Assigns the Chances
+
+Assign a probability to each value
+P(X = H) = 0.5
+P(X = T) = 0.5
+
+Add all possible values
+P(X = H) + P(X = T) = 1
+
+General rule
+P(X = x) ≥ 0
+Σx P(X = x) = 1
+
+A probability distribution assigns non-negative probability to every
+possible value, and the probabilities sum to one.
+
+Probability Foundations 19 / 101
+
+What If We Toss the Coin Twice?
+
+Toss a fair coin twice, with the two tosses independent.
+
+Event A: at least one Head
+
+HH ✓ HT ✓ TH ✓ TT ✗
+
+A = {HH, HT, TH}
+P(A) = ¼ + ¼ + ¼ = ¾
+Ω = {HH, HT, TH, TT}
+Each outcome has probability 1/4.
+
+An event is a set of outcomes. Its probability is the total probability of
+the matching outcomes.
+
+Probability Foundations 20 / 101
+
+Expectation: What Is the Average?
+
+To compute a numerical average, encode Heads as 1 and Tails as 0.
+
+Z={
+1, X = H,
+0, X = T.
+​ ​
+
+H T H H T T H T
+1 0 1 1 0 0 1 0
+E[Z] = 0.5(1) + 0.5(0) = 0.5.
+Expectation is the probability-weighted average value.
+
+Probability Foundations 21 / 101
+
+Variance: How Much Does It Vary?
+
+Expectation describes the center. Variance describes how much
+the values spread around it.
+2
+Var(Z) = E [(Z − E[Z]) ] .
+Var(Z) = 0.5(1 − 0.5)2 + 0.5(0 − 0.5)2
+= 0.25.
+​ ​
+
+Expectation describes the center; variance describes the spread around
+it.
+
+Probability Foundations 22 / 101
+
+From Coins to Tokens
+
+The probability rules stay the same. Only the possible values
+change.
+
+Coin toss Language model
+Variable: X Values: H, T Variable: Xt Values: tokens in 𝒱
+H 0.50 tea 0.50
+T 0.50 coffee 0.30
+water 0.15
+P(H) + P(T) = 1
+others 0.05
+
+Σv∈𝒱 pθ(v | x<t) = 1
+
+The same probability rules apply. A language model assigns the mass to
+tokens.
+
+Probability Foundations 23 / 101
+
+A Language Model Is Like a Huge Biased Die
+
+Rolling the die = sampling the
+next token.
+
+Many sides
+One side for each token in the vocabulary.
+
+Weighted
+Some tokens are more likely than others.
+
+Context changes it
+Different context, different probabilities.
+
+A language model is a weighted die whose probabilities change with the
+context.
+
+Probability Foundations 24 / 101
+
+A Tiny Language World
+
+The coin gave us the probability vocabulary. Now let us apply the
+same ideas to language.
+
+<s> I like tea <e>
+<s> I like coffee <e>
+<s> You like tea <e>
+
+S = Subject D = Drink
+I or You tea or coffee
+
+Sample one sentence uniformly. Now the uncertain outcomes are words
+and language sequences.
+
+Probability Foundations 25 / 101
+
+Joint Distribution: What Happens Together?
+
+For one sampled sentence, look at the subject S and drink D together.
+
+P(S, D) D = tea D = coffee
+S=I 1/3 1/3
+S = You 1/3 0
+
+1/3 0
+S = I and D = tea occur together. S = You and D = coffee never occur.
+
+A joint distribution assigns probability to combinations of variables.
+
+Probability Foundations 26 / 101
+
+Marginal Distribution: Ignore One Variable
+
+What if we care about the subject but not the drink?
+
+P(S, D) tea coffee row sum
+S=I 1/3 1/3 2/3
+S = You 1/3 0 1/3
+column sum 2/3 1/3 1
+
+P (S = s) = ∑ P (S = s, D = d)
+​
+
+d
+To marginalize a variable, sum over all of its possible values.
+
+Probability Foundations 27 / 101
+
+Conditional Distribution: Fix the Context
+
+Now suppose we already know that the subject is I.
+
+Select S = I 1/3 tea 1/3 coffee total = 2/3
+divide by 2/3
+
+P(D | S = I) 1/2 tea 1/2 coffee sum = 1
+
+P (S = s, D = d)
+P (D = d ∣ S = s) =
+P (S = s)
+​
+
+Conditioning fixes one context and renormalizes the remaining
+possibilities.
+
+Probability Foundations 28 / 101
+
+Product Rule: Build the Joint Back
+
+Conditional probability can be rearranged to reconstruct the joint
+probability.
+P (S = s, D = d) = P (S = s) P (D = d ∣ S = s)
+subject drink given subject joint
+× =
+P(S=I)=2/3 P(D=tea|S=I)=1/2 P(I,tea)=1/3
+
+Joint = Marginal × Conditional.
+
+Probability Foundations 29 / 101
+
+Chain Rule of Probability
+
+Apply the product rule repeatedly through a sequence.
+T
+p(x1:T ) = ∏ p(xt ∣ x<t )
+​ ​ ​ ​
+
+t=1
+choose choose choose
+I → like → tea
+2/3 1 1/2
+
+2 1 1
+p(I like tea) = × 1 × =
+3 2 3
+​ ​ ​
+
+A sequence probability is a product of local conditional probabilities. No
+independence assumption is required.
+
+Probability Foundations 30 / 101
+
+The Chain Rule Becomes a Language Model
+
+A language model puts parameters into each conditional
+distribution.
+
+Chain rule term Learned model
+p(xt | x<t) → pθ(xt | x<t)
+
+T
+pθ (x1:T ) = ∏ pθ (xt ∣ x<t )
+​ ​ ​ ​ ​ ​
+
+t=1
+The modeling problem is now clear: learn the next-token distribution
+for every context.
+
+Probability Foundations 31 / 101
+
+A Side Note: Conditional Direction Matters
+
+Changing what we condition on changes the question.
+
+P(coffee | I) P(I | coffee)
+Among sentences with subject I, how Among sentences with coffee, how
+many use coffee? many have subject I?
+
+1/2 1
+
+P(A | B) and P(B | A) are different conditional distributions.
+
+Probability Foundations 32 / 101
+
+Optional Tool: Bayes’ Rule
+
+Bayes’ rule lets us reverse a conditional probability.
+P (D = coffee ∣ S = I) P (S = I)
+P (S = I ∣ D = coffee) =
+P (D = coffee)
+​
+
+conditional marginal evidence
+× ÷ = 1
+1/2 2/3 1/3
+
+Useful probability tool, but autoregressive language models mainly rely
+on the chain rule.
+
+Probability Foundations 33 / 101
+
+Does Context Matter?
+
+If knowing the subject changes the drink distribution, the variables
+are dependent.
+
+information P(tea) what happened?
+subject unknown 2/3 baseline
+subject = I 1/2 changed
+subject = You 1 changed
+
+S⊥
+D ⟺
+∃s : P (D ∣ S = s) =
+ P (D)
+1 2
+P (D = tea ∣ S = I) = =  = P (D = tea)
+2 3
+​ ​
+
+Here the distribution changes with context, so subject and drink are
+dependent.
+Probability Foundations 34 / 101
+
+Markov Assumption
+
+A language model could use the full history. A Markov assumption
+keeps only recent context.
+
+No context Recent context Full history
+p(tea) p(tea | like) p(tea | I like)
+Ignore the history. Keep a short window. Keep everything before.
+
+p(xt ∣ x<t ) ≈ p(xt ∣ xt−k:t−1 )
+​ ​ ​ ​
+
+A Markov model keeps dependence on recent context and drops older
+context.
+
+Probability Foundations 35 / 101
+
+From Probability to N-grams
+
+We now know which probability a language model needs.
+
+full history →
+Markov window →
+estimate
+x<t xt-k:t-1 p(xt | context)
+
+How can we estimate this conditional distribution from text?
+
+Next: repeated contexts become counts, and counts become N-gram
+probabilities.
+
+Probability Foundations 36 / 101
+
+Chapter 2 · N-gram Models
+
+CHAPTER 2 OF 6
+
+1 Probability Foundations 2 N-gram Models
+
+3 Maximum Likelihood & Loss 4 Optimization Foundations
+
+5 Evaluation & Perplexity 6 Summary & Bridge
+
+Core question: How can the Markov idea turn a next-token conditional
+into something we can actually estimate from data?
+
+N-gram Models 37 / 101
+
+Why Full History Is Hard to Estimate
+
+Ideally, use the entire history:
+
+p(xt ∣ x1 , … , xt−1 )
+​ ​ ​
+
+Long histories rarely repeat → probabilities are hard to estimate
+reliably.
+
+N-gram Models 38 / 101
+
+The Markov Idea: Use a Shorter History
+
+Longer history
+More information, but fewer repeated
+examples.
+Shorter history
+Less information, but easier probability
+estimation.
+
+The Markov assumption trades context length for estimability.
+
+N-gram Models 39 / 101
+
+Markov Assumption → N-gram
+
+p(xt ∣ x<t ) ≈ p^N (xt ∣ ht ),
+​ ​ ​ ​ ​ ​ ht := xt−N +1:t−1
+​ ​
+
+memory used to
+model context ht
+predict tea
+unigram, N = 1 ∅ nothing
+bigram, N = 2 xt−1 like
+
+trigram, N = 3 xt−2:t−1 I like
+
+An N-gram model remembers the previous N−1 tokens when predicting the next one.
+
+The assumption chooses the memory length; the N-gram model
+estimates probabilities inside that window.
+
+N-gram Models 40 / 101
+
+Shorter Context, More Shared Evidence
+
+Keep full recent history Keep only like
+I like and You like stay separate: Both histories share one context: less
+more detail, fewer shared examples. detail, more pooled evidence.
+
+more contexts more evidence can
+truncate history → →
+match be counted together
+
+The real statistical benefit of the Markov assumption is evidence
+pooling.
+
+N-gram Models 41 / 101
+
+Repeated Contexts Become Evidence
+
+<s> I like tea <e>
+<s> I like coffee <e>
+<s> You like tea <e>
+<s> You drink coffee <e>
+
+Group by the bigram context Count its continuations
+The short context like appears three tea follows twice; coffee follows once.
+times.
+
+Different full histories now contribute evidence to the same local next-
+token prediction.
+
+N-gram Models 42 / 101
+
+Counts → Conditional Probability
+
+Context Chosen
+Normalize
+occurrences → continuation →
+2÷3
+C(like) = 3 C(like, tea) = 2
+
+C(ht , xt ) 2
+p^N (xt ∣ ht ) = ⟹ p^2 (tea ∣ like) =
+​ ​
+
+C(ht ) 3
+​ ​ ​ ​ ​ ​ ​
+
+​
+
+The denominator counts all observed continuations after ht, so one context row forms a probability
+distribution.
+
+The Markov assumption defines which examples belong together;
+normalization turns their counts into probabilities.
+
+N-gram Models 43 / 101
+
+All Local Choices in One Table
+
+Observed next tokens and
+Context h
+probabilities
+<s> I: 1/2 You: 1/2
+I like: 1
+You like: 1/2 drink: 1/2
+like tea: 2/3 coffee: 1/3
+drink coffee: 1
+tea or coffee <e>: 1
+
+An N-gram language model is a collection of local next-token probability
+tables; unseen continuations receive probability 0.
+
+N-gram Models 44 / 101
+
+What Patterns Did the Model Learn?
+
+Continuation Local association Order sensitivity
+preference
+drink → coffee is tea → <e> is observed;
+After like, tea is more observed as a strong local reversing token order is a
+likely than coffee. pattern in this corpus. different event.
+
+N-grams learn local statistical regularities by counting what tends to
+follow each context.
+
+N-gram Models 45 / 101
+
+From Local Choices to a Sentence Score
+
+What probability does the bigram assign to this sentence?
+
+<s> I like tea <e>
+
+1/2 1 2/3 1
+× × ×
+p̂ 2(I| <s> ) p̂ 2(like|I) p̂ 2(tea|like) p̂ 2( <e> |tea)
+T +1
+1 2 1
+p^2 (x1:T , ⟨e⟩ ∣ ⟨s⟩) = ∏ p^2 (xt ∣ ht ) = × 1 × × 1 =
+2 3 3
+​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​
+
+t=1
+Multiply local conditionals to obtain the sequence probability.
+
+N-gram Models 46 / 101
+
+Failure 1: An Unseen Context
+
+Query: p̂ 3(tea | I drink)
+
+Every token is familiar But the context is new
+Both I and drink occur in the corpus. C(I drink) = 0, so there is no row to
+normalize.
+The issue is not that “I drink” is impossible language; this particular context was simply never
+observed in training.
+
+Unseen context = no empirical evidence for any next-token distribution.
+
+N-gram Models 47 / 101
+
+Failure 2: A Seen Context Can Still Predict Zero
+
+Query: p̂ 2(drink | I)
+
+Context was seen Pair was unseen
+C(I) = 2, so the denominator exists and C(I, drink) = 0 ⇒ p̂ (drink | I) = 0.
+2
+the row is well-defined.
+drink is in the vocabulary, and “I drink” is perfectly plausible language. Zero only means “not
+observed in this training corpus.”
+
+Seen context + unseen continuation gives a valid distribution with an
+overconfident zero.
+
+N-gram Models 48 / 101
+
+Sparsity Leads to Zero Counts
+
+longer context → fewer repeats → zero counts
+
+The problem
+Unseen events get zero probability.
+One simple fix: smoothing
+Reserve some probability mass for
+unseen events.
+
+Smoothing fixes zero probabilities — but not the underlying sparsity.
+
+N-gram Models 49 / 101
+
+From Counts to Parameters
+
+N-gram General language model
+Probabilities come directly from counts. Shared parameters θ produce
+probabilities across contexts.
+
+next-token
+training data → parametersθ →
+probabilities
+
+How should we choose θ? Make the observed data as probable as
+possible.
+
+Language Model Training 50 / 101
+
+10-Minute Break
+
+10 MIN
+☕ Break
+Up next: Chapter 3 · Maximum Likelihood & Loss
+
+Break 51 / 101
+
+Chapter 3 · Maximum Likelihood & Loss
+
+CHAPTER 3 OF 6
+
+1 Probability Foundations 2 N-gram Models
+
+3 Maximum Likelihood & Loss 4 Optimization Foundations
+
+5 Evaluation & Perplexity 6 Summary & Bridge
+
+Core question: How do we choose parameters that make the observed
+training data likely?
+
+Maximum Likelihood & Loss 52 / 101
+
+From Count Tables to Shared Parameters
+
+N-gram model General language model
+One count-based probability row per Shared parameters θ produce every
+context. probability row.
+p̂(tea | like) = 2/3 pθ(tea | I like)
+
+next-token
+data → parametersθ →
+probabilities
+Learning now means choosing θ so the model assigns high probability to
+what actually happened.
+
+Maximum Likelihood & Loss 53 / 101
+
+Probability and Likelihood Ask Different Questions
+
+Probability Likelihood
+Fix θ; compare possible outcomes. Fix the observed x; compare
+parameters.
+pθ(x)
+L(θ; x) = pθ(x)
+What is likely under this model?
+Which parameters best support what
+we observed?
+Observed: I like → tea. If pθA(tea | I like) = 0.9 and pθB(tea | I like) = 0.2, the observation gives
+higher likelihood to θA.
+
+The numerical expression is the same; what we hold fixed and what we
+vary changes the question.
+
+Maximum Likelihood & Loss 54 / 101
+
+One Sentence Gives Many Likelihood Factors
+
+<s> I like tea <e> gives one observed next-token target at every position.
+
+<s> → I · I → like · I like → tea · … → <e>
+T +1
+L(θ; x1:T ) = ∏ pθ (xt ∣ x<t ),
+​ ​ ​ ​ ​ xT +1 = ⟨e⟩
+​
+
+t=1
+Each observed token contributes one conditional-probability factor; the final factor is the decision to
+stop.
+
+A sequence is likely when the model gives high probability to its
+observed next token at every position.
+
+Maximum Likelihood & Loss 55 / 101
+
+The Dataset Likelihood Multiplies All Observed Decisions
+
+Training data contains many sequences, and every token position provides
+one observed prediction.
+
+L(θ; D) = ∏ ∏ pθ (xt ∣ x<t )
+(i) (i)
+​ ​ ​ ​ ​
+
+i t
+
+Data stay fixed θ changes
+The corpus tells us which next tokens Different parameters assign different
+actually occurred. probabilities to those observations.
+i indexes training sequences; t indexes positions inside each sequence.
+
+Dataset likelihood is one joint score for how well θ supports all observed
+training decisions.
+
+Maximum Likelihood & Loss 56 / 101
+
+What Does argmax Mean?
+
+θ L(θ)
+θA 0.2
+θB 0.8
+θC 0.5
+
+Maximum value Argmax parameters
+maxθ L(θ) = 0.8 argmaxθ L(θ) = θB
+Optimization needs the parameter setting, so maximum likelihood uses
+argmax.
+
+Maximum Likelihood & Loss 57 / 101
+
+Maximum Likelihood Chooses the Best Parameters
+
+Which θ makes the observed training data most probable?
+
+θ^MLE = arg max L(θ; D) = arg max pθ (D)
+​ ​ ​ ​
+
+θ θ
+
+compare candidate choose highest
+observed data → →
+θ likelihood
+
+Maximum likelihood estimation (MLE) chooses the parameters that give the observed data the
+greatest support.
+
+MLE turns “fit the training data” into a precise parameter-selection
+rule.
+
+Maximum Likelihood & Loss 58 / 101
+
+N-gram Counting Was Already MLE
+
+After like, the corpus observed: tea, coffee, tea.
+
+One unknown probability Likelihood of what we saw
+Let q = p(tea | like).
+L(q) = q · (1−q) · q = q²(1−q)
+Then p(coffee | like) = 1 − q.
+
+2 2
+q^ = arg max q (1 − q) =
+3
+​ ​ ​
+
+0≤q≤1
+
+More generally, for any context h: p̂(x|h) = C(h,x) / C(h).
+Relative frequency is the MLE solution for each N-gram probability row.
+
+Maximum Likelihood & Loss 59 / 101
+
+Why Take the Log?
+
+log L(θ; D) = ∑ ∑ log pθ (xt ∣ x<t )
+(i) (i)
+​ ​ ​ ​ ​
+
+i t
+
+Products → sums Numerically safer
+log(ab) = log a + log b avoid tiny products
+
+arg max L(θ; D) = arg max log L(θ; D)
+​ ​
+
+θ θ
+
+Maximum Likelihood & Loss 60 / 101
+
+From Log-Likelihood to a Loss
+
+minimize negative log-
+maximize likelihood → maximize log-likelihood →
+likelihood
+
+LNLL (θ; D) = − log L(θ; D) = − ∑ ∑ log pθ (xt ∣ x<t )
+(i) (i)
+​ ​ ​ ​ ​ ​
+
+i t
+Multiplying by −1 reverses the optimization direction; the best θ stays exactly the same.
+
+Negative log-likelihood is not a new learning principle—it is maximum
+likelihood written as a minimization problem.
+
+Maximum Likelihood & Loss 61 / 101
+
+Reading One Token Loss
+
+Observed target: I like → tea
+
+p(tea) = 0.90 p(tea) = 0.10 p(tea) = 0.01
+−log 0.90 ≈ 0.105 −log 0.10 ≈ 2.303 −log 0.01 ≈ 4.605
+small loss large loss very large loss
+
+Lt = − log pθ (xt ∣ x<t )
+​ ​ ​ ​
+
+High probability on the correct token gives low loss; confident mistakes
+are penalized strongly.
+
+Maximum Likelihood & Loss 62 / 101
+
+One-Hot Cross-Entropy = Token NLL
+
+I like → tea: the target distribution puts all probability mass on the
+observed token.
+candidate v target qt(v) model pθ(v | x<t)
+tea 1 0.90
+coffee 0 0.08
+You 0 0.02
+
+CEt = − ∑ qt (v) log pθ (v ∣ x<t ) = − log pθ (xt ∣ x<t )
+​ ​ ​ ​ ​ ​ ​ ​
+
+v∈V
+For one-hot next-token targets, cross-entropy and token-level NLL are
+the same objective.
+
+Maximum Likelihood & Loss 63 / 101
+
+LM Repeats the Same Loss Everywhere
+
+<s> → I + I → like + I like → tea + … → <e>
+
+Lseq = − ∑ log pθ (xt ∣ x<t )
+​ ​ ​ ​ ​
+
+t
+
+Total NLL Average token loss
+
+−Σt log pt −(1/T) Σt log pt
+Sum over the sequence. Normalize by token count.
+Apply the same next-token loss at every token position.
+
+Maximum Likelihood & Loss 64 / 101
+
+One Principle, Several Equivalent Views
+
+make min NLL /
+max max log-
+observed → → → cross-
+likelihood likelihood
+data likely entropy
+
+arg max L(θ; D) = arg max log L(θ; D) = arg min LNLL (θ; D)
+​ ​ ​ ​
+
+θ θ θ
+
+What we now know What comes next
+What objective should training improve? How should θ change to reduce that
+objective?
+
+We now have a differentiable training objective. Next: gradients and
+optimization.
+
+Maximum Likelihood & Loss 65 / 101
+
+Chapter 4 · Optimization Foundations
+
+CHAPTER 4 OF 6
+
+1 Probability Foundations 2 N-gram Models
+
+3 Maximum Likelihood & Loss 4 Optimization Foundations
+
+5 Evaluation & Perplexity 6 Summary & Bridge
+
+Core question: Given a loss J(θ), how do we find better parameters?
+
+Optimization Foundations 66 / 101
+
+The Vocabulary of Optimization
+
+θ∗ = arg min J(θ) ​
+
+θ
+
+θ — what we can change
+
+J(θ) — what we want to reduce
+θ* — the best parameters we can find
+
+You want to go downhill — but you only know the
+local slope.
+
+Loss defines what we want; optimization finds parameters that reduce
+it.
+Optimization Foundations 67 / 101
+
+From Loss to an Optimization Problem
+
+We can score a model. Which parameters make that score as small as possible?
+
+J(θ; D) = − ∑ ​ log pθ (xt ∣ x<t ),
+​ ​ ​ θ∗ = arg min J(θ; D) ​
+
+θ
+(x<t ,xt )∈D
+​ ​
+
+J(θA ) = 0.44 < J(θB ) = 1.20
+​ ​ ⟹ choose θA ​
+
+max likelihood = max log-likelihood = min negative log-likelihood
+
+Probability defines the objective; optimization searches for the
+parameters.
+
+Optimization Foundations 68 / 101
+
+An Objective Function Forms a Landscape
+
+J(θ) = (θ − 3)2 , J(θ1 , θ2 ) = θ12 + θ22
+​ ​ ​ ​
+
+One parameter Two parameters
+J current θ₂
+current
+
+minimum
+
+minimum
+
+0 3 θ θ₁
+
+Training moves through parameter space toward lower loss.
+
+Optimization Foundations 69 / 101
+
+Convex vs. Non-Convex Objectives
+
+A simple bowl and a neural-network landscape pose different
+optimization challenges.
+Convex example Non-convex example
+
+one global minimum
+
+multiple valleys
+
+Bowl-shaped · every local minimum is global Neural-network objectives are generally non-
+convex
+
+Real neural-network objectives are generally not simple bowls.
+
+Optimization Foundations 70 / 101
+
+A Derivative Measures Local Sensitivity
+
+If θ increases slightly, does the loss rise or fall, and by how much?
+
+dJ
+dθ
+​
+
+↗ J′(θ) > 0 ↘ J′(θ) < 0 → J′(θ) = 0
+Moving right increases Moving right decreases The loss is locally flat
+the loss the loss
+
+A derivative describes how one output changes near the current input.
+
+Optimization Foundations 71 / 101
+
+A Concrete Derivative Example
+
+2
+J(θ) = (θ − 3) , θ = 1, J(1) = 4
+move slightly new loss loss decreased
+→ →
+1 → 1.1 J(1.1)=3.61 4 → 3.61
+J ′ (1) = 2(1 − 3) = −4
+The negative derivative predicts that increasing θ from 1 will reduce the
+loss locally.
+
+Optimization Foundations 72 / 101
+
+A Partial Derivative Changes One Parameter
+
+J(θ1 , θ2 ) = (θ1 − 2)2 + (θ2 − 1)2
+​ ​ ​ ​
+
+Change only θ1 Change only θ2
+∂J / ∂θ1 = 2(θ1 − 2) ∂J / ∂θ2 = 2(θ2 − 1)
+
+A partial derivative isolates the sensitivity along one parameter
+direction.
+
+Optimization Foundations 73 / 101
+
+The Gradient Collects Every Local Sensitivity
+
+−4
+∇J(0, 0) = [ ]
+−2
+​
+
+∇J = [−4, −2] −∇J = [4, 2]⊤
+⊤
+
+Increasing θ1 or θ2 locally lowers this The negative gradient combines both
+loss. downhill parameter directions.
+
+One parameter has one derivative. Many parameters produce a gradient
+vector.
+
+Optimization Foundations 74 / 101
+
+Gradient: Direction and Steepness
+
+2 dJ ∂J ∂J ⊤
+J(θ) = (θ − 3) , = 2(θ − 3), ∇θ J = [ ∂θ1 ​ ⋯ ∂θn ] ​
+
+dθ
+​ ​ ​ ​ ​
+
+​ ​
+
+Local slope on the quadratic loss Direction
+Local slope on the quadratic loss
+∇J points toward the
+fastest local increase; −∇J
+θ = 1: J′ = −4 θ = 5: J′ = 4 points downhill.
+loss J(θ)
+
+Magnitude
+−∇J points downhill
+‖∇J‖ tells us how steep the
+θ=1
+parameter θ
+θ=5
+landscape is.
+
+The gradient tells us how the loss locally changes with the parameters.
+Optimization Foundations 75 / 101
+
+Gradient Descent: Take a Step Downhill
+
+θk+1 = θk − η∇θ J (θk ) ,
+​ ​ ​ ​ ​ η > 0 is the learning rate
+Measure the gradient → update → repeat
+
+J′(0) = −6 → θ1 = 0.6 · J′(0.6) = −4.8 → θ2 = 1.08
+η too small η reasonable η too large
+slow steady unstable
+
+Gradient gives the direction; learning rate determines the step size.
+
+Optimization Foundations 76 / 101
+
+Learning Rate Controls Stability
+
+Start from θ0 = 0 on J(θ) = (θ − 3)2.
+
+learning rate first updates behavior
+
+0 → 0.30 → 0.57 →
+η = 0.05 stable, slow
+...
+
+reaches the
+η = 0.50 0→3
+minimum
+
+0 → 6.6 → −1.32 → overshoots and
+η = 1.10
+... diverges
+
+Learning rate controls both progress and stability.
+
+Optimization Foundations 77 / 101
+
+Full Gradient vs. Mini-batch Gradient
+
+N
+1 1
+∇θ J (θ) = ∑ ∇θ Ji (θ), ∇θ JB (θ) = ∑ ∇θ Ji (θ)
+N i=1 ∣B∣
+​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​
+
+i∈B
+
+SGD / mini-
+Aspect Full GD
+batch
+Data per whole one example or
+update dataset small batch
+Update cost high lower
+Path smooth noisy
+
+Mini-batch SGD uses cheap, noisy gradient estimates.
+
+Optimization Foundations 78 / 101
+
+Mini-batch Gradient Is Signal Plus Noise
+
+g^B = g + εB
+​ ​ ​
+
+Full gradient g Batch noise εB
+Average direction over the full training Variation from the examples sampled
+set. into batch B.
+
+EB [g^B ] = g
+​ ​ ​
+
+The equality assumes the usual unbiased random sampling scheme.
+A mini-batch gradient is a noisy estimate of the full gradient.
+
+Optimization Foundations 79 / 101
+
+Batch Size Changes Gradient Variability
+
+Small batch Large batch
+Cheaper per update Costlier per update
+Noisier gradient Smoother gradient
+More frequent updates Fewer updates for a fixed data budget
+
+Batch size changes both computation and optimization dynamics.
+
+Optimization Foundations 80 / 101
+
+Why Plain SGD Can Struggle
+
+One learning rate must handle parameters with very different gradient scales.
+
+Steep direction →
+oscillation
+Large steps bounce across the
+valley.
+
+Flat direction → slow
+progress
+Small steps crawl toward the
+minimum.
+
+Plain SGD oscillates in steep directions and moves slowly in flat ones.
+
+Optimization Foundations 81 / 101
+
+Momentum Smooths and Accelerates Updates
+
+Plain SGD Momentum
+Uses only the current mini-batch Accumulates consistent directions.
+gradient. Cancels oscillating components.
+
+vk = βvk−1 + ∇θ J (θk ),
+​ ​ ​ ​ θk+1 = θk − η vk ,
+​ ​ ​ 0≤β<1
+β = 0 recovers plain SGD; larger β averages over more past gradients.
+
+Momentum damps oscillation across steep directions and speeds up
+progress along consistent ones.
+
+Optimization Foundations 82 / 101
+
+Optimization Needs Gradients
+
+data → pθ(xt| x<t) → J(θ) → ∇θ J → θnew
+
+θ∗ = arg min J(θ), ​ θ ← θ − η∇θ J (θ) ​
+
+θ
+A neural network has many connected parameters. How do we compute all their gradients efficiently?
+
+θ = {E, W1 , b1 , W2 , b2 , …},
+​ ​ ​ ​ ∇θ J (θ) = ?
+​ ​
+
+Optimization requires gradients. Next: how do neural networks
+compute them efficiently?
+
+Optimization Foundations 83 / 101
+
+Chapter 5 · Evaluation & Perplexity
+
+CHAPTER 5 OF 6
+
+1 Probability Foundations 2 N-gram Models
+
+3 Maximum Likelihood & Loss 4 Optimization Foundations
+
+5 Evaluation & Perplexity 6 Summary & Bridge
+
+Core question: Does the fitted model generalize to held-out text?
+
+Evaluation & Perplexity 84 / 101
+
+Why Training Loss Is Not Enough
+
+Suppose a model reaches almost zero training loss. Is it necessarily a
+good language model?
+
+Underfitting Good fit Overfitting
+
+train bad · held-out bad train good · held-out good train excellent · held-out
+worse
+
+Fitting training data is not the goal; generalizing to unseen data is.
+
+Evaluation & Perplexity 85 / 101
+
+Evaluate on Data the Model Did Not Fit
+
+Train Dev Test
+learn parameters θ → choose settings → estimate generalization
+homework mock exam final exam
+
+If test scores repeatedly guide our choices, the test set becomes another dev
+set.
+
+Now we have held-out text. How should we score it?
+
+Evaluation & Perplexity 86 / 101
+
+Why Not Just Use Sequence Probability?
+
+Assume the same model assigns each ordinary token probability 0.8.
+
+T
+pθ (x1:T ) = ∏ pθ (xt ∣ x<t )
+​ ​ ​ ​ ​ ​
+
+t=1
+
+Short prefix Longer sequence
+<s> I like <s> I like tea <e>
+0.8 × 0.8 = 0.6400 0.8 × 0.8 × 0.8 × 0.6 =
+0.3072
+
+Each extra token adds a factor below 1. We need a score per token, not
+per sequence.
+Evaluation & Perplexity 87 / 101
+
+Average NLL = Average Surprise per Token
+
+Start with one token: negative log-probability measures its surprise.
+
+Lt = − log pθ (xt ∣ x<t )
+​ ​ ​ ​
+
+T
+1 1
+NLL = − ∑ log pθ (xt ∣ x<t ) = − log pθ (x1:T )
+T t=1 T
+​ ​ ​ ​ ​ ​ ​ ​ ​
+
+Short prefix Longer sequence
+−ln(0.6400) / 2 ≈ 0.223 −ln(0.3072) / 4 ≈ 0.295
+
+Average NLL asks: how surprised is the model per token?
+
+Evaluation & Perplexity 88 / 101
+
+Perplexity Puts Surprise Back on a Familiar Scale
+
+Average NLL is on a log scale. Perplexity reverses that transform.
+
+PPLθ (x1:T ) = exp(NLLθ (x1:T ))
+​ ​ ​ ​ ​
+
+1 1
+PPLθ (x1:T ) = exp(− log pθ (x1:T )) = pθ (x1:T ) −1/T
+=
+T (∏ pt )1/T
+​ ​ ​ ​ ​ ​ ​ ​
+
+t ​ ​
+
+Average NLL 0.223 Average NLL 0.295
+e0.223 ≈ 1.25 e0.295 ≈ 1.34
+
+Lower average NLL ⇔ lower PPL. The final form is the inverse geometric
+mean token probability.
+
+Evaluation & Perplexity 89 / 101
+
+What Does Perplexity Feel Like?
+
+K equal choices surprise per token perplexity
+1 NLL = − log
+1
+= log K PPL = e log K
+=K
+p(xt ) = K
+​
+
+K
+​ ​
+
+PPL = 2 PPL = 10
+about 2 effective choices about 10 effective choices
+per token per token
+
+“Effective” is not a literal candidate count. Lower PPL means less
+uncertainty about the observed next token.
+
+Evaluation & Perplexity 90 / 101
+
+How Should We Interpret a PPL Number?
+
+Is lower always better? Does low PPL mean a good
+chatbot?
+Only under the same setup: held-
+out text, tokenizer, context, masking, Not necessarily. PPL measures next-
+and scoring. token predictive fit—not factuality,
+unbelievable reasoning, instruction following, or
+usefulness.
+un | believ | able Use task and human/model-based
+Different token units mean different evaluation too.
+“per-token” scales.
+
+Compare PPL within one setup; it is not complete model quality.
+
+Evaluation & Perplexity 91 / 101
+
+Full Story: From Training to Perplexity
+
+training data fit pθ held-out text token average NLL PPL =
+→ → → surprise → → exp(average
+−log pθ NLL)
+
+Evaluation Definition Intuition
+Test generalization on PPL = exp(average NLL). Effective uncertainty per
+held-out data. token.
+
+We can train and evaluate pθ. Who computes pθ(xt | x<t)?
+
+Evaluation & Perplexity 92 / 101
+
+Chapter 6 · Summary & Bridge
+
+CHAPTER 6 OF 6
+
+1 Probability Foundations 2 N-gram Models
+
+3 Maximum Likelihood & Loss 4 Optimization Foundations
+
+5 Evaluation & Perplexity 6 Summary & Bridge
+
+Core question: How do probability, loss, optimization, and evaluation
+form one learning loop?
+
+Summary & Bridge 93 / 101
+
+The full loop: context to held-out PPL
+
+Anchor question: after <s> I like, how should the model score tea and
+coffee?
+
+context next-token → joint / MLE / held-out
+→ → estimate pθ → →
++ data distribution chain NLL PPL
+
+<s> I like tea <e>
+<s> I like coffee <e>
+<s> You like tea <e>
+
+Learn pθ → optimize J → check held-out surprise.
+
+Summary & Bridge 94 / 101
+
+Chain local choices into a sequence score
+
+For <s> I like tea <e>, how do local predictions become one score?
+
+T
+pθ (x1:T ) = ∏ pθ (xt ∣ x<t )
+​ ​ ​ ​ ​ ​
+
+t=1
+
+2/3 × 1 × 2/3 × 1 = 4/9
+
+Multiply one conditional per position: local choices become a global
+sequence likelihood.
+
+Summary & Bridge 95 / 101
+
+Counts estimate the conditional
+
+Where do the conditional numbers come from when all we have is text?
+
+count prefix total conditional
+÷ =
+C(like, tea) = 2 C(like) = 3 2/3
+
+C(ht , xt ) 2
+p^N (xt ∣ ht ) = , p^2 (tea ∣ like) =
+​ ​
+
+C(ht ) 3
+​ ​ ​ ​ ​ ​ ​ ​
+
+​
+
+Relative frequency is the constrained n-gram MLE; short windows and
+zero counts are its visible limits.
+
+Summary & Bridge 96 / 101
+
+Likelihood, log, and NLL share one optimum
+
+The observed targets are fixed. Which θ supports them best?
+
+L(θ; D) = ∏ ​ pθ (xt ∣ x<t ),
+​ ​ ​ θ^ = arg max L(θ; D)
+​
+
+θ
+(x<t ,xt )∈D
+​ ​
+
+maximize maximize minimize
+→ →
+L(θ;𝒟) log L(θ;𝒟) JNLL(θ;𝒟)
+
+JNLL (θ; D) = − log L(θ; D)
+​
+
+log is strictly increasing (same winner); − reverses max into min.
+
+Summary & Bridge 97 / 101
+
+The Optimization Loop
+
+mini-batch
+data → J(θ) → → optimizer → θ update
+gradient
+
+θ ← θ − optimizer(∇θ J ) ​
+
+SGD Momentum
+Uses the raw mini-batch gradient. Averages recent gradients to damp
+zigzag and speed progress.
+
+Training repeats loss measurement, gradient estimation, and parameter
+updates.
+
+Summary & Bridge 98 / 101
+
+Held-out PPL checks generalization
+
+A low training loss is not enough. How surprised is θ by unseen text?
+
+Train: fit θ. Held-out: measure the same sequence probability on unseen x1:T.
+JNLL (θ; x1:T )
+PPL(θ; x1:T ) = exp( ) = pθ (x1:T )−1/T
+​
+
+T
+​ ​ ​ ​
+
+same held-out text average NLL PPL
+Model A 2.0 e2.0 ≈ 7.39
+Model B 2.4 e2.4 ≈ 11.02
+
+Lower PPL means lower average surprise only under the same held-out
+text and tokenization.
+
+Summary & Bridge 99 / 101
+
+Two Different Chain Rules
+
+Probability chain rule Calculus chain rule
+p(x1:T) = ∏t p(xt | x<t) dJ / dθ = (dJ / dz)(dz / dθ)
+Factorizes a joint probability into Propagates derivatives through
+conditional probabilities. connected computations.
+
+The names match, but the probability rule and calculus rule solve
+different problems.
+
+Summary & Bridge 100 / 101
+
+Next: compute the conditional distribution
+
+Forward: who computes pθ(xt | x<t)?
+
+Tokenization → Network → logits → Softmax → pθ(xt|x<t)
+
+Backward: who computes ∇θJ?
+
+calculus
+loss J → → backpropagation → gradients
+chain rule
+
+Next lecture opens the neural network that computes the distribution
+and its gradients.
+
+Summary & Bridge 101 / 101

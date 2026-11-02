@@ -1,0 +1,44 @@
+DSAI 4207 / POST-CLASS STUDY MATERIAL
+
+Sequence Models & Attention
+A short self-study path to rebuild the intuition from sequence memory to attention.
+
+START HERE · TOP RECOMMENDATION
+
+3Blue1Brown — Attention in Transformers, step-by-step
+Best single visual explanation of how attention selects and combines information. For this class, focus on the
+attention idea and Q/K/V intuition; you do not need the full Transformer architecture.
+
+Conceptual map What the four resources collectively explain
+01 Sequence memory 02 Seq2Seq bottleneck 03 Attention 04 Q/K/V intuition
+RNN / hidden state Why one vector is limiting Score → weight → context Search → match → retrieve
+
+Four resources, one role each
+01 SEQUENCE MODEL REFRESHER · VIDEO
+
+StatQuest — Recurrent Neural Networks (RNNs), Clearly Explained
+Use it to refresh why a sequence model needs a hidden state: the current state depends on both the current input
+and what came before.
+
+02 WHY ATTENTION IS NEEDED · VISUAL WEBPAGE
+
+Jay Alammar — Visualizing a Neural Machine Translation Model
+Use it to see the bridge from RNN/Seq2Seq to attention. Focus on the fixed-context bottleneck and why the decoder
+should look back at different input states.
+
+03 FORMALIZE THE IDEA · BOOK / TUTORIAL
+
+Dive into Deep Learning — The Bahdanau Attention Mechanism
+Use it after the visual intuition. It connects the idea to the mathematics: attention scores → normalized weights → a
+weighted context vector.
+
+04 MODERN ATTENTION INTUITION · VIDEO TOP PICK
+
+3Blue1Brown — Attention in Transformers, step-by-step
+Use it for the clearest visual intuition of Q/K/V and information retrieval. Think: Query = what I am looking for; Key =
+what I match against; Value = what information I retrieve.
+
+If you only have 30 minutes: watch 3Blue1Brown first, then use the Jay Alammar webpage to connect the intuition
+back to RNN/Seq2Seq.
+
+DSAI 4207 · Sequence Models & Attention

@@ -1,0 +1,182 @@
+{
+  "frozen": true,
+  "course": "DSAI4207 Introduction to Large Language Models",
+  "note": "Answers are expected to be findable in data/extracted lecture text. gold_hint_source is for the team only and is NOT used at runtime.",
+  "questions": [
+    {
+      "id": "q01",
+      "question": "In the LLM lifecycle lecture slide titled \"One Answer Runs on Two Clocks\", what does the user see versus what makes the answer possible?",
+      "gold_hint_source": "lecture01_lifecycle.pdf"
+    },
+    {
+      "id": "q02",
+      "question": "In the LLM lifecycle lecture, what do demonstrations and preferences later get called in the post-training pipeline?",
+      "gold_hint_source": "lecture01_lifecycle.pdf"
+    },
+    {
+      "id": "q03",
+      "question": "What self-supervision objective does Lecture 1 describe for learning from raw text, and what loss is minimized?",
+      "gold_hint_source": "lecture01_lifecycle.pdf"
+    },
+    {
+      "id": "q04",
+      "question": "What does a language model assign probabilities to, according to Lecture 2?",
+      "gold_hint_source": "lecture02_probabilistic_lm.pdf"
+    },
+    {
+      "id": "q05",
+      "question": "Write the product formula Lecture 2 gives for the probability of an entire token sequence x1:T under a language model.",
+      "gold_hint_source": "lecture02_probabilistic_lm.pdf"
+    },
+    {
+      "id": "q06",
+      "question": "At position t, how does Lecture 2 define the context x<t for next-token prediction?",
+      "gold_hint_source": "lecture02_probabilistic_lm.pdf"
+    },
+    {
+      "id": "q07",
+      "question": "Why does Lecture 2 say next-token prediction is a powerful learning signal? List the reasons it gives (free supervision, what prediction requires, unified paradigm).",
+      "gold_hint_source": "lecture02_probabilistic_lm.pdf"
+    },
+    {
+      "id": "q08",
+      "question": "In the tokenization/embeddings lecture, what is the full forward pipeline from text to next-token probability?",
+      "gold_hint_source": "lecture_tokenization_embeddings_nn.pdf"
+    },
+    {
+      "id": "q09",
+      "question": "What fundamental trade-off does tokenization make according to the course notes, and how does BPE start?",
+      "gold_hint_source": "lecture_tokenization_embeddings_nn.pdf"
+    },
+    {
+      "id": "q10",
+      "question": "In the tokenization and embeddings lecture, Lecture 2 defined conditional probability pθ(xt|x<t); which loss and which evaluation metric follow from that (NLL / cross-entropy → Perplexity)?",
+      "gold_hint_source": "lecture_tokenization_embeddings_nn.pdf"
+    },
+    {
+      "id": "q11",
+      "question": "According to Lecture 4, why must tokens exchange information, and what mechanism (Q, K, V) is introduced to let them do so?",
+      "gold_hint_source": "lecture04_mixing_information.pdf"
+    },
+    {
+      "id": "q12",
+      "question": "Why can a fully connected MLP not process variable-length token sequences without a mixing solution, according to Lecture 4?",
+      "gold_hint_source": "lecture04_mixing_information.pdf"
+    },
+    {
+      "id": "q13",
+      "question": "In Lecture 5's Llama-2-7B parameter breakdown, roughly what share of parameters sit in the FFN versus attention, and what absolute sizes are given?",
+      "gold_hint_source": "lecture05_full_architecture.pdf"
+    },
+    {
+      "id": "q14",
+      "question": "What does the residual stream store in a Transformer block according to Lecture 5, and what does a sublayer propose?",
+      "gold_hint_source": "lecture05_full_architecture.pdf"
+    },
+    {
+      "id": "q15",
+      "question": "How does LayerNorm compute statistics according to Lecture 5 — across which dimension, and not across which?",
+      "gold_hint_source": "lecture05_full_architecture.pdf"
+    },
+    {
+      "id": "q16",
+      "question": "According to the mixing-information / attention lecture, write the scaled dot-product self-attention formula Attention(Q, K, V), and why use multi-head attention?",
+      "gold_hint_source": "lecture04_mixing_information.pdf"
+    },
+    {
+      "id": "q17",
+      "question": "According to Lecture 6, what are the three signals that can stop the generation loop?",
+      "gold_hint_source": "lecture06_decoding_inference.pdf"
+    },
+    {
+      "id": "q18",
+      "question": "How does Lecture 6 contrast top-k sampling with beam search?",
+      "gold_hint_source": "lecture06_decoding_inference.pdf"
+    },
+    {
+      "id": "q19",
+      "question": "What are the two main chapter themes of Lecture 6 (decoding vs efficient inference), and which topics fall under efficient inference?",
+      "gold_hint_source": "lecture06_decoding_inference.pdf"
+    },
+    {
+      "id": "q20",
+      "question": "Describe the predict → choose → append generation feedback loop from Lecture 6.",
+      "gold_hint_source": "lecture06_decoding_inference.pdf"
+    },
+    {
+      "id": "q21",
+      "question": "Lecture 7 frames four decisions that turn random weights into a base model. What are those four decisions?",
+      "gold_hint_source": "lecture07_pretraining_scaling.pdf"
+    },
+    {
+      "id": "q22",
+      "question": "What distributional goal does Lecture 7 state for pretraining (relating pθ and pdata)?",
+      "gold_hint_source": "lecture07_pretraining_scaling.pdf"
+    },
+    {
+      "id": "q23",
+      "question": "According to Lecture 8, why is a pretrained model not yet a useful assistant, and what does post-training change in broad terms?",
+      "gold_hint_source": "lecture08_posttraining_alignment.pdf"
+    },
+    {
+      "id": "q24",
+      "question": "Name the parameter-update methods compared in Lecture 8's Chapter II (full fine-tuning, adapters, LoRA) and one storage/cost difference mentioned for LoRA versus full fine-tuning.",
+      "gold_hint_source": "lecture08_posttraining_alignment.pdf"
+    },
+    {
+      "id": "q25",
+      "question": "Which training signals does Lecture 8 list under Chapter III (SFT, preferences, RLHF & PPO, DPO)?",
+      "gold_hint_source": "lecture08_posttraining_alignment.pdf"
+    },
+    {
+      "id": "q26",
+      "question": "In the LoRA post-training tutorial, what is the trainable update formula W′, and which matrices are trainable versus frozen?",
+      "gold_hint_source": "tutorial_lora_posttraining.pdf"
+    },
+    {
+      "id": "q27",
+      "question": "For a 2048×2048 weight matrix with LoRA rank 8, how many trainable parameters does the tutorial example report, and what percentage of the full matrix is that?",
+      "gold_hint_source": "tutorial_lora_posttraining.pdf"
+    },
+    {
+      "id": "q28",
+      "question": "According to Lecture 9, what stays fixed when you prompt a frozen model, and what changes compared to training?",
+      "gold_hint_source": "lecture09_prompt_engineering.pdf"
+    },
+    {
+      "id": "q29",
+      "question": "What is chain-of-thought prompting as described in Lecture 9, and how does self-consistency use multiple reasoning paths?",
+      "gold_hint_source": "lecture09_prompt_engineering.pdf"
+    },
+    {
+      "id": "q30",
+      "question": "In Tutorial 9's room-booking extraction lab, which four JSON output fields are required, and what are the allowed values for status?",
+      "gold_hint_source": "tutorial09_prompt_engineering.pdf"
+    },
+    {
+      "id": "q31",
+      "question": "Under Tutorial 9's time-order policy, when is status set to needs_clarification even if times are present?",
+      "gold_hint_source": "tutorial09_prompt_engineering.pdf"
+    },
+    {
+      "id": "q32",
+      "question": "According to Lecture 10, how does closed-book answering differ from answering with retrieved evidence from a reading pack?",
+      "gold_hint_source": "lecture10_embeddings_rag.pdf"
+    },
+    {
+      "id": "q33",
+      "question": "Why can keyword/BM25-style search miss the meaning of a query according to Lecture 10?",
+      "gold_hint_source": "lecture10_embeddings_rag.pdf"
+    },
+    {
+      "id": "q34",
+      "question": "In Lecture 10's BERTopic-style clustering discussion, what do unassigned HDBSCAN points typically become, and what does c-TF-IDF provide for a cluster?",
+      "gold_hint_source": "lecture10_embeddings_rag.pdf"
+    },
+    {
+      "id": "q35",
+      "question": "How does Lecture 10 contrast Lecture 9's better prompting with Lecture 10's better evidence for answering a film-club reading-pack question?",
+      "gold_hint_source": "lecture10_embeddings_rag.pdf"
+    }
+  ]
+}
